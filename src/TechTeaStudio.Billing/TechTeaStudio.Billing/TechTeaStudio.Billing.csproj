@@ -8,7 +8,7 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);CS1591;CS1573;CS1574</NoWarn>
     <PackageId>TechTeaStudio.Billing</PackageId>
-    <Version>0.1.0</Version>
+    <Version>0.2.0</Version>
     <Authors>Ronald Ryan</Authors>
     <Company>Tech Tea Studio</Company>
     <Description>Provider-agnostic payment billing for ASP.NET Core. Hosted checkout and verified webhooks for Stripe, YooKassa, Shopify and Telegram Stars behind one IBillingProvider seam, with pluggable payment store and fulfillment.</Description>
@@ -16,7 +16,7 @@
     <PackageProjectUrl>https://github.com/TechTeaStudio/Billing</PackageProjectUrl>
     <PackageIcon>icon.png</PackageIcon>
     <Copyright>Copyright (c) Tech Tea Studio 2026</Copyright>
-    <PackageReleaseNotes>v0.1.0: Initial release. IBillingProvider seam with Stripe, YooKassa, Shopify and Telegram Stars providers, HMAC/re-fetch webhook verification, provider-agnostic orchestrator, pluggable IBillingPaymentStore + IBillingFulfillment.</PackageReleaseNotes>
+    <PackageReleaseNotes>v0.2.0: Config-binding overload (AddTechTeaStudioBilling(config)), default in-memory payment store, no-op fulfillment, OnPaymentSucceeded delegate, MapTechTeaStudioBilling endpoint helper.</PackageReleaseNotes>
     <PackageTags>billing;payments;stripe;yookassa;shopify;telegram;checkout;webhook;aspnetcore;TechTeaStudio</PackageTags>
   </PropertyGroup>
   <PropertyGroup>

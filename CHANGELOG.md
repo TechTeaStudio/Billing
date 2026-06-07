@@ -1,3 +1,18 @@
+## v0.2.0
+
+Turnkey config-driven setup: a consumer sets provider config values in appsettings and billing works with no boilerplate.
+
+### Added
+
+- `AddTechTeaStudioBilling(IConfiguration config, string sectionName)` overload - binds all four provider option classes from config sub-sections automatically. Providers whose section is absent stay dormant (`IsConfigured == false`).
+- `InMemoryBillingPaymentStore` - thread-safe dev default for `IBillingPaymentStore` registered via `TryAddSingleton`. Swap with `UsePaymentStore<T>()` for production.
+- `NoOpBillingFulfillment` - dev default for `IBillingFulfillment` registered via `TryAddScoped`. Logs a one-time warning so developers notice unplugged fulfillment.
+- `IBillingBuilder.OnPaymentSucceeded(Func<IServiceProvider, BillingNotification, CancellationToken, Task>)` - one-line delegate fulfillment; replaces the no-op via `RemoveAll` + re-add.
+- `DelegateBillingFulfillment` - internal fulfillment implementation that wraps the delegate.
+- `UsePaymentStore<T>()` and `UseFulfillment<T>()` now call `RemoveAll` before re-adding so they cleanly replace the defaults instead of stacking registrations.
+- `MapTechTeaStudioBilling(IEndpointRouteBuilder, string basePath)` - maps `POST /billing/webhook/{provider}` and `POST /billing/telegram/bot` endpoints. Ports the provider-agnostic webhook and Telegram Stars bot lifecycle from Chronos into the package itself.
+- Tests: `InMemoryBillingPaymentStoreTests`, `OnPaymentSucceededDelegateTests`, `ConfigOverloadTests`.
+
 ## v0.1.0
 
 Initial release. Provider-agnostic payment billing for ASP.NET Core.

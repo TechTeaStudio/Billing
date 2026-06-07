@@ -16,6 +16,44 @@
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-MIT-blue.svg" /></a>
 </p>
 
+## Quick start (5 minutes)
+
+Pass your configuration and billing works - providers self-detect from config (`IsConfigured`). Only the sections you fill in activate.
+
+```csharp
+// Program.cs
+builder.Services.AddTechTeaStudioBilling(builder.Configuration)
+    .OnPaymentSucceeded(async (sp, note, ct) =>
+    {
+        // note.PlanId, note.UserId, note.AmountMinor - grant the purchase here
+    });
+
+var app = builder.Build();
+app.MapTechTeaStudioBilling();   // POST /billing/webhook/{provider} + /billing/telegram/bot
+```
+
+```json
+// appsettings.json - configure only the provider(s) you use
+"Billing": {
+  "YooKassa": {
+    "ShopId": "...",
+    "SecretKey": "...",
+    "Currency": "RUB",
+    "Amounts": { "plus": 299, "pro": 599 }
+  },
+  "Telegram": {
+    "BotToken": "...",
+    "BotUsername": "mybot",
+    "WebhookSecret": "...",
+    "Plans": {
+      "plus": { "Stars": 100, "Title": "Plus", "Description": "Plus tier" }
+    }
+  }
+}
+```
+
+Providers whose config section is absent or empty stay dormant - their `IsConfigured` is `false` and they are hidden from the upgrade UI. The in-memory payment store is the dev default: idempotency does not survive a restart or scale-out. Call `UsePaymentStore<T>()` with a persistent store in production.
+
 ## What this gives you
 
 A single `IBillingProvider` seam that fronts four payment gateways behind one orchestrator. Wire up Stripe, YooKassa, Shopify, or Telegram Stars (or all four at once) and your business logic never references a gateway directly.
@@ -32,7 +70,9 @@ A single `IBillingProvider` seam that fronts four payment gateways behind one or
 dotnet add package TechTeaStudio.Billing
 ```
 
-## Quick start
+## Manual setup (full control)
+
+Use the parameterless overload when you need to configure providers programmatically instead of from appsettings.
 
 ```csharp
 // Program.cs
