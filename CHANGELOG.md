@@ -3,6 +3,10 @@
 All notable changes to this package are documented here.
 Format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.2] - 2026-08-15
+
+Version bump only, to give the publish pipeline a version it has not seen. No source, package or metadata changes. `dotnet nuget push` runs with `--skip-duplicate`, so re-pushing an existing version is a silent no-op - a new number is the only way to tell "published" from "skipped".
+
 ## [0.5.1] - 2026-08-15
 
 Packaging fix: v0.4.0 and v0.5.0 could never publish. No library code changed.

@@ -14,7 +14,7 @@
     <PackageId>TechTeaStudio.Billing.Abstractions</PackageId>
     <!-- Must be a literal tag in this file - the publish workflow greps for it. Keep in sync
          with TechTeaStudio.Billing.csproj; see the note in Directory.Build.props. -->
-    <Version>0.5.1</Version>
+    <Version>0.5.2</Version>
     <Description>Contracts for TechTeaStudio.Billing: IBillingProvider, IBillingService, IBillingPaymentStore, IBillingFulfillment, IExternalPurchaseService, the attribution stores, the payment/notification models, ClaimCode and BillingPlanGuard. No dependencies and no ASP.NET Core framework reference, so domain and application assemblies can implement the seams without taking on the web stack. Referenced automatically by TechTeaStudio.Billing.</Description>
     <PackageTags>billing;payments;abstractions;contracts;netstandard;netframework;stripe;yookassa;shopify;telegram;kofi;patreon;TechTeaStudio</PackageTags>
     <PackageReleaseNotes>v0.5.0: First standalone release. Split out of TechTeaStudio.Billing so implementing the host seams no longer requires the ASP.NET Core shared framework. Targets netstandard2.0 and net472 alongside net5.0 through net10.0, so a .NET Framework 4.6.2+ assembly can share these contracts with a modern billing host. Namespaces are unchanged (TechTeaStudio.Billing.Abstractions, TechTeaStudio.Billing), so existing code needs no edits. Note that on netstandard2.0/net472 the two default-implemented members of IBillingPaymentStore must be implemented, because those runtimes have no default interface members.

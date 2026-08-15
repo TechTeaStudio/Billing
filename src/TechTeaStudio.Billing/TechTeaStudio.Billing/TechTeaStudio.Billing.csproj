@@ -4,7 +4,7 @@
     <PackageId>TechTeaStudio.Billing</PackageId>
     <!-- Must be a literal tag in this file - the publish workflow greps for it. Keep in sync
          with TechTeaStudio.Billing.Abstractions.csproj; see the note in Directory.Build.props. -->
-    <Version>0.5.1</Version>
+    <Version>0.5.2</Version>
     <Description>Provider-agnostic payment billing for ASP.NET Core. Hosted checkout and verified webhooks for Stripe, YooKassa, Shopify and Telegram Stars, plus external donation platforms (Ko-fi, Patreon, manual Boosty) with claim-code attribution and an unclaimed-purchase holding area - all behind one IBillingProvider seam with pluggable payment store and fulfillment. Targets net5.0 through net10.0.</Description>
     <PackageTags>billing;payments;stripe;yookassa;shopify;telegram;kofi;patreon;boosty;donations;checkout;webhook;aspnetcore;TechTeaStudio</PackageTags>
     <PackageReleaseNotes>v0.5.0: TechTeaStudio.Billing.Abstractions additionally targets netstandard2.0 and net472, so .NET Framework 4.6.2+ assemblies can share the contracts. This package itself stays .NET 5+ - it needs the ASP.NET Core shared framework, which has not run on .NET Framework since ASP.NET Core 3.0.
