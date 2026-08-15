@@ -27,6 +27,11 @@ public enum BillingEventKind
     PaymentSucceeded = 1,
     PaymentCanceled = 2,
     PaymentFailed = 3,
+
+    /// <summary>A previously confirmed payment was refunded (or flagged as fraud) by the
+    /// provider. Recorded against the original payment; fulfillment is never re-run and
+    /// revocation is left to the host (watch the store for <see cref="BillingPaymentStatus.Refunded"/>).</summary>
+    PaymentRefunded = 4,
 }
 
 /// <summary>A verified, normalized webhook notification a provider produces from a raw callback.</summary>
@@ -49,6 +54,10 @@ public enum BillingPaymentStatus
     Succeeded = 1,
     Canceled = 2,
     Failed = 3,
+
+    /// <summary>The payment succeeded earlier and was later refunded. A payment in this
+    /// state is never fulfilled again, even if the original success webhook is redelivered.</summary>
+    Refunded = 4,
 }
 
 /// <summary>An immutable snapshot of a payment record stored by <see cref="IBillingPaymentStore"/>.</summary>

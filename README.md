@@ -5,7 +5,7 @@
 <h1 align="center">TechTeaStudio.Billing</h1>
 
 <p align="center">
-  Provider-agnostic payment billing for ASP.NET Core. One seam, four gateways.
+  Provider-agnostic payment billing for ASP.NET Core. One seam: Stripe, YooKassa, Shopify, Telegram Stars, Ko-fi, Patreon.
 </p>
 
 <p align="center">
@@ -56,13 +56,15 @@ Providers whose config section is absent or empty stay dormant - their `IsConfig
 
 ## What this gives you
 
-A single `IBillingProvider` seam that fronts four payment gateways behind one orchestrator. Wire up Stripe, YooKassa, Shopify, or Telegram Stars (or all four at once) and your business logic never references a gateway directly.
+A single `IBillingProvider` seam that fronts six payment surfaces behind one orchestrator. Wire up Stripe, YooKassa, Shopify, Telegram Stars, Ko-fi, or Patreon (or all at once) and your business logic never references a gateway directly.
 
-- Hosted checkout sessions with a redirect URL for each provider.
-- Verified, idempotent webhook processing. Every gateway uses its own hardened verification: HMAC for Stripe and Shopify, re-fetch from the API for YooKassa, secret-token header for Telegram.
+- Hosted checkout sessions with a redirect URL for each gateway provider.
+- Verified, idempotent webhook processing. Every provider uses its own hardened verification: HMAC-SHA256 for Stripe and Shopify, re-fetch from the API for YooKassa, secret-token header for Telegram, constant-time verification token for Ko-fi, HMAC-MD5 (Patreon's mandated scheme) for Patreon.
+- External purchases: donations and memberships that happen ON the platform (Ko-fi, Patreon, Boosty) are attributed to app users via claim codes and identity links; anything unattributable lands in an unclaimed holding area instead of being lost. See "External purchases" below.
+- Refund tracking: a refunded payment is marked `Refunded` and a redelivered success webhook can never re-grant it.
 - Pluggable `IBillingPaymentStore` so you own the payment record in your own database.
 - Pluggable `IBillingFulfillment` called exactly once per confirmed payment - grant a plan, credit a wallet, send an email, whatever your domain requires.
-- Plan IDs are plain strings (`"plus"`, `"pro"`, `"annual"`) - no enum coupling to your subscription model.
+- Plan/product IDs are plain strings (`"plus"`, `"pro"`, `"credits100"`) - no enum coupling to your subscription model. `BillingPlanGuard` refuses checkout for plans whose provider price is 0/absent (a configured 0 is a money hole).
 
 ## Install
 
@@ -137,6 +139,19 @@ return Redirect(session.RedirectUrl);
 | YooKassa | Re-fetch payment from the API (webhook body is unsigned) | Underpaid defence compares amount to `Amounts[planId]` |
 | Shopify | HMAC-SHA256 Base64 via `X-Shopify-Hmac-Sha256` header | Underpaid defence on `note_attributes` - buyer-influenceable |
 | Telegram Stars | `X-Telegram-Bot-Api-Secret-Token` exact-match | Deep-link checkout; bot sends XTR invoice; `WebhookSecret` required |
+| Ko-fi | Static `verification_token` inside the payload, constant-time compare (Ko-fi offers no HMAC) | Body is form-urlencoded with a `data` field carrying JSON; no refund/cancel webhooks exist - time-box entitlements |
+| Patreon | HMAC-MD5 lowercase hex of the RAW body via `X-Patreon-Signature` (Patreon's mandated scheme) | Per-WEBHOOK secret, not the OAuth secret; `members:*` triggers; refunds recorded; portal "Send Test" payloads do not match production |
+
+## External purchases (Ko-fi, Patreon, Boosty)
+
+Gateway checkouts know the buyer up front. Donation platforms do not: a Ko-fi payment arrives carrying only an email, a display name, and a typed message. The external-purchase layer turns those into app-user grants safely:
+
+1. **Claim codes.** `IExternalPurchaseService.GetClaimCodeAsync(userId)` returns the user's stable code (`CHR-K7M2P9XA`; prefix from `Billing:External:ClaimCodePrefix`). Your UI shows it next to the "Support us on Ko-fi" link; the buyer pastes it into the payment message. The webhook extracts it and attributes the payment - and persists a (provider, email) identity link so message-less subscription RENEWALS attach automatically (Ko-fi sends the message only on one-time payments).
+2. **Product mapping.** Platform tiers/items map to your product ids in options: `Billing:Kofi:TierProducts:Gold Tier = pro`, `Billing:Patreon:TierProducts:9012345 = pro` (Patreon maps by tier ID, not title), `Billing:Kofi:ShopItemProducts:<direct_link_code> = ...`, `Billing:Kofi:DonationProductId` for plain donations. What a product id means is your fulfillment's decision.
+3. **Unclaimed holding area.** A payment with no code, no link, or no product mapping is parked in `IUnclaimedPurchaseStore` - money already received must never be dropped. Claim paths: `ClaimByEmailAsync(provider, verifiedEmail, userId)` (pass ONLY emails whose ownership the user has proven), targeted `ClaimAsync(...)` with an optional product override for admins, and `ListUnclaimedAsync(...)` for the admin view.
+4. **Boosty.** Boosty has NO official API and NO webhooks (everything on api.boosty.to is reverse-engineered from the SPA and unstable, with a browser-session token). The supported path is therefore manual: the creator sees the payment in the Boosty dashboard or the official @boosty_to_bot Telegram notifications and records it with `SubmitAsync(purchase, userId)` - same idempotent pipeline, provider name `"boosty"`. Claim codes still help: ask subscribers to send theirs via Boosty DM.
+
+Production checklist: the three attribution stores default to in-memory dev implementations - swap ALL of them (`UseClaimCodeStore<T>()`, `UseExternalIdentityLinkStore<T>()`, `UseUnclaimedPurchaseStore<T>()`) with database-backed stores, exactly like `UsePaymentStore<T>()`. Ko-fi cannot notify you about refunds or membership endings, so grant time-boxed entitlements keyed to the last renewal payment and revoke manually on refunds; Patreon refunds arrive via `members:update` and are recorded as `Refunded` automatically; Patreon decline states are unreliable - reconcile periodically against `GET /api/oauth2/v2/campaigns/{id}/members`.
 
 ## The two seams you implement
 
@@ -151,10 +166,18 @@ public interface IBillingPaymentStore
         string provider, string providerPaymentId, CancellationToken ct = default);
 
     Task UpsertAsync(BillingPaymentRecord record, CancellationToken ct = default);
+
+    // Both have default implementations - override them in production (see below).
+    Task<bool> TryReserveAsync(BillingPaymentRecord pending, CancellationToken ct = default);
+    Task MarkRefundedAsync(BillingPaymentRecord refundContext, CancellationToken ct = default);
 }
 ```
 
-`UpsertAsync` is called after fulfillment succeeds. Your fulfillment must be idempotent on `ProviderPaymentId` - if the store upsert fails after fulfillment, the provider will retry and the orchestrator will call fulfillment again. Checking `GetStatusAsync` inside fulfillment guards against double-granting.
+`TryReserveAsync` decides who fulfills. The default is a status read, which stops a finished payment from being fulfilled again but cannot separate two *simultaneous* first deliveries - so **override it with an atomic insert-first claim** (`INSERT ... ON CONFLICT DO NOTHING`, or a unique index on `(Provider, ProviderPaymentId)` and catching the duplicate-key exception): the caller that inserts the Pending row wins, everyone else gets `false`. Until you do, fulfillment must be idempotent on `ProviderPaymentId`.
+
+`MarkRefundedAsync` receives refund-time values, which are often worse than what you already stored - a fully refunded Patreon membership reports no tier and zero cents, and the buyer may be unattributable. **Override it to flip only the status** of the existing row so `UserId`/`PlanId`/`AmountMinor` survive; those are what you revoke against. When no row exists (a refund that overtook its own success webhook) the record is a tombstone and must still be written, otherwise the late success would fulfill refunded money.
+
+`UpsertAsync` is called after fulfillment succeeds. If it fails at that point the provider will retry and fulfillment runs again - another reason fulfillment should be idempotent.
 
 ### IBillingFulfillment
 
@@ -176,14 +199,20 @@ public interface IBillingFulfillment
 src/TechTeaStudio.Billing/
   TechTeaStudio.Billing/
     Abstractions/    IBillingProvider, IBillingService, IBillingPaymentStore,
-                     IBillingFulfillment, ITelegramBot, models, enums
+                     IBillingFulfillment, ITelegramBot, IExternalPurchaseService,
+                     IClaimCodeStore, IExternalIdentityLinkStore,
+                     IUnclaimedPurchaseStore, ClaimCode, models, enums
     Providers/       StripeBillingProvider, YooKassaBillingProvider,
                      ShopifyBillingProvider, TelegramStarsBillingProvider,
-                     StripeSignature, ShopifySignature, options
-    Services/        BillingService
+                     KofiBillingProvider, PatreonBillingProvider,
+                     StripeSignature, ShopifySignature, PatreonSignature, options
+    Services/        BillingService, ExternalPurchaseService, PaymentPipeline,
+                     in-memory dev stores
     AspNetCore/      BillingServiceCollectionExtensions, IBillingBuilder
+    BillingPlanGuard.cs
   TechTeaStudio.Billing.Tests/
-    tests for signatures, payload encoding, and orchestrator idempotency
+    tests for signatures, payload encoding, provider parsing, attribution,
+    refunds, and orchestrator idempotency
 ```
 
 ## Build and test

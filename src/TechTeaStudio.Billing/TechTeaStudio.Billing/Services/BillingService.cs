@@ -12,8 +12,7 @@ namespace TechTeaStudio.Billing.Services;
 public sealed class BillingService : IBillingService
 {
     private readonly IReadOnlyDictionary<string, IBillingProvider> _providers;
-    private readonly IBillingPaymentStore _store;
-    private readonly IBillingFulfillment _fulfillment;
+    private readonly PaymentPipeline _pipeline;
     private readonly ILogger<BillingService> _log;
 
     public BillingService(
@@ -22,9 +21,13 @@ public sealed class BillingService : IBillingService
         IBillingFulfillment fulfillment,
         ILogger<BillingService> log)
     {
-        _providers = providers.ToDictionary(p => p.Name, StringComparer.OrdinalIgnoreCase);
-        _store = store;
-        _fulfillment = fulfillment;
+        // GroupBy, not ToDictionary: a host that calls AddTechTeaStudioBilling twice (or mixes
+        // the config and manual overloads) registers each provider twice, and a duplicate-key
+        // throw here would break every webhook and checkout at runtime.
+        _providers = providers
+            .GroupBy(p => p.Name, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+        _pipeline = new PaymentPipeline(store, fulfillment, log);
         _log = log;
     }
 
@@ -41,7 +44,19 @@ public sealed class BillingService : IBillingService
         if (!_providers.TryGetValue(providerName, out var provider) || !provider.IsConfigured)
             return null;
 
-        return await provider.CreateCheckoutAsync(request, ct);
+        try
+        {
+            return await provider.CreateCheckoutAsync(request, ct);
+        }
+        catch (InvalidOperationException ex)
+        {
+            // A provider refusing a checkout (unpriced plan, no support-page URL) is an
+            // "unavailable" answer to the caller, not a 500 for the user.
+            _log.LogWarning(ex,
+                "Checkout refused by provider={Provider} for plan={PlanId}.",
+                provider.Name, request.PlanId);
+            return null;
+        }
     }
 
     public async Task<bool> HandleWebhookAsync(
@@ -53,55 +68,6 @@ public sealed class BillingService : IBillingService
         var note = await provider.ParseNotificationAsync(rawBody, headers, ct);
         if (note is null) return false;
 
-        var existingStatus = await _store.GetStatusAsync(provider.Name, note.ProviderPaymentId, ct);
-
-        // Idempotency: already succeeded - stop retries.
-        if (existingStatus == BillingPaymentStatus.Succeeded) return true;
-
-        if (note.Kind is BillingEventKind.PaymentCanceled or BillingEventKind.PaymentFailed)
-        {
-            var terminal = note.Kind == BillingEventKind.PaymentCanceled
-                ? BillingPaymentStatus.Canceled
-                : BillingPaymentStatus.Failed;
-            await _store.UpsertAsync(
-                new BillingPaymentRecord(
-                    note.UserId, provider.Name, note.ProviderPaymentId, note.PlanId,
-                    note.AmountMinor, note.Currency, terminal), ct);
-            return true;
-        }
-
-        // Authenticated but irrelevant event - accept so the provider stops retrying.
-        if (note.Kind != BillingEventKind.PaymentSucceeded) return true;
-
-        // PaymentSucceeded path: call fulfillment then persist.
-        try
-        {
-            await _fulfillment.OnPaymentSucceededAsync(note, ct);
-        }
-        catch (Exception ex)
-        {
-            _log.LogError(ex, "Fulfillment failed for provider={Provider} paymentId={PaymentId}.",
-                provider.Name, note.ProviderPaymentId);
-            return false;
-        }
-
-        try
-        {
-            await _store.UpsertAsync(
-                new BillingPaymentRecord(
-                    note.UserId, provider.Name, note.ProviderPaymentId, note.PlanId,
-                    note.AmountMinor, note.Currency, BillingPaymentStatus.Succeeded), ct);
-        }
-        catch (Exception ex)
-        {
-            // Fulfillment already ran - prefer returning true so the provider does not retry
-            // and fulfillment is not called a second time. The host's fulfillment must be
-            // idempotent on ProviderPaymentId to guard against any race that does cause a retry.
-            _log.LogError(ex,
-                "Store upsert failed after fulfillment succeeded for provider={Provider} paymentId={PaymentId}.",
-                provider.Name, note.ProviderPaymentId);
-        }
-
-        return true;
+        return await _pipeline.ProcessAsync(provider.Name, note, ct) != PaymentOutcome.Failed;
     }
 }

@@ -19,11 +19,27 @@ public interface IBillingBuilder
     IBillingBuilder AddShopify(Action<ShopifyBillingOptions> configure);
     IBillingBuilder AddTelegramStars(Action<TelegramBillingOptions> configure);
 
+    /// <summary>Ko-fi external purchases (webhook at POST {basePath}/webhook/kofi).
+    /// Attribution runs on claim codes and identity links - see <see cref="IExternalPurchaseService"/>.</summary>
+    IBillingBuilder AddKofi(Action<KofiBillingOptions> configure);
+
+    /// <summary>Patreon memberships (webhook at POST {basePath}/webhook/patreon).</summary>
+    IBillingBuilder AddPatreon(Action<PatreonBillingOptions> configure);
+
     /// <summary>Register the host's payment-store implementation, replacing the default in-memory store.</summary>
     IBillingBuilder UsePaymentStore<TStore>() where TStore : class, IBillingPaymentStore;
 
     /// <summary>Register the host's fulfillment implementation, replacing the default no-op.</summary>
     IBillingBuilder UseFulfillment<TFulfillment>() where TFulfillment : class, IBillingFulfillment;
+
+    /// <summary>Register the host's claim-code store, replacing the default in-memory one.</summary>
+    IBillingBuilder UseClaimCodeStore<TStore>() where TStore : class, IClaimCodeStore;
+
+    /// <summary>Register the host's identity-link store, replacing the default in-memory one.</summary>
+    IBillingBuilder UseExternalIdentityLinkStore<TStore>() where TStore : class, IExternalIdentityLinkStore;
+
+    /// <summary>Register the host's unclaimed-purchase store, replacing the default in-memory one.</summary>
+    IBillingBuilder UseUnclaimedPurchaseStore<TStore>() where TStore : class, IUnclaimedPurchaseStore;
 
     /// <summary>
     /// Register an inline fulfillment delegate, replacing the default no-op. The simplest
@@ -58,6 +74,18 @@ public static class BillingServiceCollectionExtensions
         services.AddScoped<IBillingService, BillingService>();
         services.TryAddSingleton<IBillingPaymentStore, InMemoryBillingPaymentStore>();
         services.TryAddScoped<IBillingFulfillment, NoOpBillingFulfillment>();
+
+        // External purchases (Ko-fi / Patreon / manual Boosty): attribution stores default
+        // to in-memory dev implementations; swap with the Use*Store<T>() builder methods.
+        services.TryAddSingleton<IClaimCodeStore, InMemoryClaimCodeStore>();
+        services.TryAddSingleton<IExternalIdentityLinkStore, InMemoryExternalIdentityLinkStore>();
+        services.TryAddSingleton<IUnclaimedPurchaseStore, InMemoryUnclaimedPurchaseStore>();
+        services.AddScoped(sp => new PaymentPipeline(
+            sp.GetRequiredService<IBillingPaymentStore>(),
+            sp.GetRequiredService<IBillingFulfillment>(),
+            sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<PaymentPipeline>>()));
+        services.TryAddScoped<IExternalPurchaseService, ExternalPurchaseService>();
+
         return new BillingBuilder(services);
     }
 
@@ -99,6 +127,10 @@ public static class BillingServiceCollectionExtensions
         builder.AddYooKassa(o => config.GetSection($"{sectionName}:YooKassa").Bind(o));
         builder.AddShopify(o => config.GetSection($"{sectionName}:Shopify").Bind(o));
         builder.AddTelegramStars(o => config.GetSection($"{sectionName}:Telegram").Bind(o));
+        builder.AddKofi(o => config.GetSection($"{sectionName}:Kofi").Bind(o));
+        builder.AddPatreon(o => config.GetSection($"{sectionName}:Patreon").Bind(o));
+        services.Configure<ExternalPurchaseOptions>(
+            o => config.GetSection($"{sectionName}:External").Bind(o));
 
         return builder;
     }
@@ -147,6 +179,25 @@ internal sealed class BillingBuilder : IBillingBuilder
         return this;
     }
 
+    public IBillingBuilder AddKofi(Action<KofiBillingOptions> configure)
+    {
+        Services.Configure(configure);
+        // No HttpClient: Ko-fi is inbound-only (the webhook is the whole integration).
+        Services.AddScoped<KofiBillingProvider>();
+        Services.AddScoped<IBillingProvider>(
+            sp => sp.GetRequiredService<KofiBillingProvider>());
+        return this;
+    }
+
+    public IBillingBuilder AddPatreon(Action<PatreonBillingOptions> configure)
+    {
+        Services.Configure(configure);
+        Services.AddScoped<PatreonBillingProvider>();
+        Services.AddScoped<IBillingProvider>(
+            sp => sp.GetRequiredService<PatreonBillingProvider>());
+        return this;
+    }
+
     public IBillingBuilder UsePaymentStore<TStore>() where TStore : class, IBillingPaymentStore
     {
         Services.RemoveAll<IBillingPaymentStore>();
@@ -168,6 +219,29 @@ internal sealed class BillingBuilder : IBillingBuilder
         Services.AddSingleton(handler);
         Services.RemoveAll<IBillingFulfillment>();
         Services.AddScoped<IBillingFulfillment, DelegateBillingFulfillment>();
+        return this;
+    }
+
+    public IBillingBuilder UseClaimCodeStore<TStore>() where TStore : class, IClaimCodeStore
+    {
+        Services.RemoveAll<IClaimCodeStore>();
+        Services.AddScoped<IClaimCodeStore, TStore>();
+        return this;
+    }
+
+    public IBillingBuilder UseExternalIdentityLinkStore<TStore>()
+        where TStore : class, IExternalIdentityLinkStore
+    {
+        Services.RemoveAll<IExternalIdentityLinkStore>();
+        Services.AddScoped<IExternalIdentityLinkStore, TStore>();
+        return this;
+    }
+
+    public IBillingBuilder UseUnclaimedPurchaseStore<TStore>()
+        where TStore : class, IUnclaimedPurchaseStore
+    {
+        Services.RemoveAll<IUnclaimedPurchaseStore>();
+        Services.AddScoped<IUnclaimedPurchaseStore, TStore>();
         return this;
     }
 }
