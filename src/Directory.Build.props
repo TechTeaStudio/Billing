@@ -5,7 +5,13 @@
        cannot drift apart in version, target frameworks or packaging settings. -->
 
   <PropertyGroup>
-    <Version>0.5.0</Version>
+    <!-- NO <Version> HERE. The org-wide publish workflow reads each package's version by
+         grepping the .csproj text for a literal <Version> tag:
+             VERSION=$(grep -Po '(?<=<Version>)[^<]+' "$proj" || true)
+             if [[ -z "$VERSION" ]]; then echo "Skipping $proj"; continue; fi
+         It never asks MSBuild, so a version set here is invisible to it and every project is
+         silently skipped - nothing gets packed and the release goes out empty. Each packable
+         .csproj therefore carries its own <Version>, and they must be bumped together. -->
     <Authors>Ronald Ryan</Authors>
     <Company>Tech Tea Studio</Company>
     <Copyright>Copyright © Tech Tea Studio 2026</Copyright>

@@ -3,6 +3,14 @@
 All notable changes to this package are documented here.
 Format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.1] - 2026-08-15
+
+Packaging fix: v0.4.0 and v0.5.0 could never publish. No library code changed.
+
+### Fixed
+
+- **`<Version>` is back in each packable `.csproj`.** Moving it into `Directory.Build.props` in v0.4.0 looked like de-duplication, but the org publish workflow reads the version by grepping the project file text (`grep -Po '(?<=<Version>)[^<]+' "$proj"`) and skips any project without a literal tag. Both packages were skipped, `artifacts/` came out empty, and the push step then iterated a glob that matched nothing. Every other setting stays centralised; only the version is duplicated, and `Directory.Build.props` now carries a comment saying why it must not move back.
+
 ## [0.5.0] - 2026-08-15
 
 .NET Framework reach for the contracts. `TechTeaStudio.Billing.Abstractions` now also targets `netstandard2.0` and `net472`, so a .NET Framework 4.6.2+ assembly can share the billing contracts with a modern ASP.NET Core host. The main package is unchanged and stays .NET 5+.
