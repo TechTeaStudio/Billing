@@ -7,6 +7,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TechTeaStudio.Billing", "Te
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TechTeaStudio.Billing.Tests", "TechTeaStudio.Billing.Tests\TechTeaStudio.Billing.Tests.csproj", "{A20FFBCA-9D34-4238-A9F6-C1D05589B432}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TechTeaStudio.Billing.Abstractions", "..\TechTeaStudio.Billing.Abstractions\TechTeaStudio.Billing.Abstractions\TechTeaStudio.Billing.Abstractions.csproj", "{9120EEEB-D5F7-46B7-8F59-B60B88836C2F}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -41,6 +43,18 @@ Global
 		{A20FFBCA-9D34-4238-A9F6-C1D05589B432}.Release|x64.Build.0 = Release|Any CPU
 		{A20FFBCA-9D34-4238-A9F6-C1D05589B432}.Release|x86.ActiveCfg = Release|Any CPU
 		{A20FFBCA-9D34-4238-A9F6-C1D05589B432}.Release|x86.Build.0 = Release|Any CPU
+		{9120EEEB-D5F7-46B7-8F59-B60B88836C2F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{9120EEEB-D5F7-46B7-8F59-B60B88836C2F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{9120EEEB-D5F7-46B7-8F59-B60B88836C2F}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{9120EEEB-D5F7-46B7-8F59-B60B88836C2F}.Debug|x64.Build.0 = Debug|Any CPU
+		{9120EEEB-D5F7-46B7-8F59-B60B88836C2F}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{9120EEEB-D5F7-46B7-8F59-B60B88836C2F}.Debug|x86.Build.0 = Debug|Any CPU
+		{9120EEEB-D5F7-46B7-8F59-B60B88836C2F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{9120EEEB-D5F7-46B7-8F59-B60B88836C2F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{9120EEEB-D5F7-46B7-8F59-B60B88836C2F}.Release|x64.ActiveCfg = Release|Any CPU
+		{9120EEEB-D5F7-46B7-8F59-B60B88836C2F}.Release|x64.Build.0 = Release|Any CPU
+		{9120EEEB-D5F7-46B7-8F59-B60B88836C2F}.Release|x86.ActiveCfg = Release|Any CPU
+		{9120EEEB-D5F7-46B7-8F59-B60B88836C2F}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

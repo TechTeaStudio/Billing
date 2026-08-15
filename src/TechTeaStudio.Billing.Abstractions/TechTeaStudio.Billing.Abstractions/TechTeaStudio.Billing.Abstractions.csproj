@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Contracts only. This project deliberately has ZERO package references and no
+       FrameworkReference: a host's domain assembly can implement IBillingFulfillment or
+       IBillingPaymentStore without being dragged onto the ASP.NET Core shared framework,
+       which is exactly what referencing the main package would do to it. -->
+
+  <PropertyGroup>
+    <PackageId>TechTeaStudio.Billing.Abstractions</PackageId>
+    <Description>Contracts for TechTeaStudio.Billing: IBillingProvider, IBillingService, IBillingPaymentStore, IBillingFulfillment, IExternalPurchaseService, the attribution stores, the payment/notification models, ClaimCode and BillingPlanGuard. No dependencies and no ASP.NET Core framework reference, so domain and application assemblies can implement the seams without taking on the web stack. Referenced automatically by TechTeaStudio.Billing.</Description>
+    <PackageTags>billing;payments;abstractions;contracts;stripe;yookassa;shopify;telegram;kofi;patreon;TechTeaStudio</PackageTags>
+    <PackageReleaseNotes>v0.4.0: First standalone release. Split out of TechTeaStudio.Billing so implementing the host seams no longer requires the ASP.NET Core shared framework. Targets net5.0 through net10.0. Namespaces are unchanged (TechTeaStudio.Billing.Abstractions, TechTeaStudio.Billing), so existing code needs no edits.
+
+Full changelog: https://github.com/TechTeaStudio/Billing/blob/product/CHANGELOG.md</PackageReleaseNotes>
+  </PropertyGroup>
+
+</Project>

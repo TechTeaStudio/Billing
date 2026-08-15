@@ -56,7 +56,9 @@ public sealed class StripeBillingProvider : IBillingProvider
 
         using var msg = new HttpRequestMessage(HttpMethod.Post, $"{ApiBase}/checkout/sessions")
         {
-            Content = new FormUrlEncodedContent(form),
+            // form! : on net5.0 this ctor is annotated IEnumerable<KeyValuePair<string?, string?>>
+            // and was tightened to non-nullable in net6.0, so one of the two would warn without it.
+            Content = new FormUrlEncodedContent(form!),
         };
         msg.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _opts.SecretKey);
 

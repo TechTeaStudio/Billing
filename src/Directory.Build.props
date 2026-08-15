@@ -1,0 +1,68 @@
+<Project>
+
+  <!-- Shared by every project in the solution. Package identity and description stay in the
+       individual .csproj files; everything uniform lives here so the two packable projects
+       cannot drift apart in version, target frameworks or packaging settings. -->
+
+  <PropertyGroup>
+    <Version>0.4.0</Version>
+    <Authors>Ronald Ryan</Authors>
+    <Company>Tech Tea Studio</Company>
+    <Copyright>Copyright © Tech Tea Studio 2026</Copyright>
+    <PackageProjectUrl>https://github.com/TechTeaStudio/Billing</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/TechTeaStudio/Billing</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <!-- net5.0/6.0/7.0 are out of support upstream; they are carried here so hosts stuck on an
+         older runtime can still take security fixes to this library. The SDK downloads the
+         matching reference packs from NuGet, so no old SDK needs to be installed to build them. -->
+    <TargetFrameworks>net5.0;net6.0;net7.0;net8.0;net9.0;net10.0</TargetFrameworks>
+    <CheckEolTargetFramework>false</CheckEolTargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591;CS1573;CS1574</NoWarn>
+    <!-- The same source compiles six times, so a warning that fires on one old framework only is
+         one line in a log six times longer than it used to be - easy to scroll past. Fatal on the
+         build server; left as warnings locally so iteration stays fast. -->
+    <TreatWarningsAsErrors Condition="'$(GITHUB_ACTIONS)' == 'true'">true</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <!-- Deliberately NO GeneratePackageOnBuild. Six frameworks times two packable projects means
+         it would repack four .nupkg/.snupkg on every build - including Debug and every
+         dotnet test run - and leave Debug-configuration packages sitting in bin/Debug.
+         Packing is one explicit Release step; CI already runs it that way. -->
+    <PackageIcon>icon.png</PackageIcon>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <!-- Debugging into the package: SourceLink for GitHub ships inside the SDK since 8.0.100,
+         so these three properties are the whole setup - no PackageReference required. -->
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <!-- Byte-identical output for a given commit, but only on the build server: enabling it
+         locally rewrites source paths and breaks step-through debugging in the IDE. -->
+    <ContinuousIntegrationBuild Condition="'$(GITHUB_ACTIONS)' == 'true'">true</ContinuousIntegrationBuild>
+    <Deterministic>true</Deterministic>
+    <!-- Fails the pack if the six target frameworks do not expose the same public API, which is
+         the failure mode a TFM-conditional (#if) most easily introduces. -->
+    <EnablePackageValidation>true</EnablePackageValidation>
+  </PropertyGroup>
+
+  <!-- Files packed identically into both packages. This file sits at src/, so sibling package
+       folders (src/TechTeaStudio.Billing.Abstractions/...) pick the settings up too. Paths are
+       anchored to this file rather than relative to each project, so adding a package folder
+       does not mean counting ..\ levels again. -->
+  <ItemGroup Condition="'$(IsPackable)' != 'false'">
+    <None Include="$(MSBuildThisFileDirectory)TechTeaStudio.Billing\icon.png" Pack="true" PackagePath="\" Visible="false" />
+    <None Include="$(MSBuildThisFileDirectory)..\README.md" Pack="true" PackagePath="\" Visible="false" />
+    <None Include="$(MSBuildThisFileDirectory)..\CHANGELOG.md" Pack="true" PackagePath="\" Visible="false" />
+    <None Include="$(MSBuildThisFileDirectory)..\LICENSE" Pack="true" PackagePath="\" Visible="false" />
+  </ItemGroup>
+
+</Project>

@@ -1,4 +1,38 @@
-## v0.3.0
+# Changelog
+
+All notable changes to this package are documented here.
+Format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [0.4.0] - 2026-08-15
+
+Reach and packaging. The library now runs on net5.0 through net10.0 instead of net8.0+, and the contracts ship as their own dependency-free package so a domain assembly can implement the seams without being pulled onto the ASP.NET Core shared framework. No behaviour changed and no namespace moved - existing code compiles untouched.
+
+### Added
+
+- `TechTeaStudio.Billing.Abstractions` - a second package holding the contracts (`IBillingProvider`, `IBillingService`, `IBillingPaymentStore`, `IBillingFulfillment`, `IExternalPurchaseService`, `ITelegramBot`, the three attribution stores), the models, `ClaimCode` and `BillingPlanGuard`. Zero package references and no `FrameworkReference`. `TechTeaStudio.Billing` depends on it, so `dotnet add package TechTeaStudio.Billing` still brings everything and nothing needs re-importing.
+- Symbol packages (`.snupkg`) and SourceLink on both packages, so consumers can step into this code from their debugger. SourceLink needs no `PackageReference` - it has shipped inside the SDK since 8.0.100.
+- `EnablePackageValidation` - `dotnet pack` now fails if the six target frameworks stop exposing the same public API, which is the mistake a `#if` most easily introduces.
+- `Directory.Build.props` holding version, target frameworks and packaging settings once, so the two packable projects cannot drift apart.
+- `BillingEndpointMappingTests` - the mapped endpoints had no coverage at all. Five tests pull the real `RequestDelegate` off the endpoint and invoke it: `{provider}` route-segment binding, raw body pass-through, case-insensitive header lookup, 400 on a rejected payload, 404 when no `ITelegramBot` is registered, and the `basePath` argument. 121 tests total.
+- `New-FolderIcon.ps1` - rebuilds the repository's Windows folder icon (`.icon/folder.ico`, 16-256 px frames, plus the UTF-16 `desktop.ini` and the attributes the shell needs) from the package icon. Same `.icon/folder.ico` layout as the HyperionProtocol, Auth and ConfigBase repositories; the generated files are gitignored, since git cannot carry the hidden+system attribute that makes them work.
+
+### Changed
+
+- **Target frameworks: `net5.0;net6.0;net7.0;net8.0;net9.0;net10.0`** (was `net8.0;net9.0;net10.0`). Building the older three needs no old SDK installed - the .NET 10 SDK downloads the reference packs from NuGet. Be aware that net5.0, net6.0 and net7.0 are out of support upstream; they are here so a host stuck on an older runtime can still take fixes, not as an endorsement.
+- `MapTechTeaStudioBilling` now maps `RequestDelegate` handlers instead of minimal-API lambdas. That overload has existed since ASP.NET Core 3.0, whereas the `Results` helpers and the `Delegate` overload of `MapPost` are .NET 6+, so this is what makes net5.0 reachable from one source file. Routes, status codes and behaviour are identical; the `{provider}` segment is now read from `HttpRequest.RouteValues` and the status set directly on the response.
+- Test project targets `net8.0;net9.0;net10.0` (added net10.0). It deliberately does not target net5.0-net7.0: those runtimes are not installed in CI, and the only framework-conditional code path in the library is the `StreamReader.ReadToEndAsync` overload, which net8.0 and net10.0 already straddle.
+- Package descriptions and release notes state the supported framework range.
+- `GeneratePackageOnBuild` removed. Six frameworks times two packable projects meant four `.nupkg`/`.snupkg` were repacked on every build, including Debug and every `dotnet test` run, leaving Debug-configuration packages in `bin/Debug`. Packing is now one explicit `dotnet pack -c Release` step, which is what CI already did.
+- Warnings are errors on the build server only (`TreatWarningsAsErrors` gated on `GITHUB_ACTIONS`). With the same source compiling six times, a warning that fires on one old framework is easy to scroll past; local builds still just warn.
+- README logo pointed at `/product/icon.png`, but the icon lives at `src/TechTeaStudio.Billing/icon.png` - the image was broken. Path corrected.
+- Project layout now follows the same convention as the sibling repositories: each package gets its own `src/<PackageId>/<PackageId>/` folder, so `TechTeaStudio.Billing.Abstractions` sits beside `TechTeaStudio.Billing` rather than inside it, and the solution references it with `..\` exactly as `TechTeaStudio.Auth.sln` references its sub-packages. `Directory.Build.props` moved up to `src/` so sibling package folders inherit it. The CI glob `src/*/*/*.csproj` matches either way.
+
+### Fixed
+
+- `StreamReader.ReadToEndAsync(CancellationToken)` in the webhook endpoints only exists from .NET 7 on; the pre-net7.0 builds use the parameterless overload. The request body stream still observes `RequestAborted` underneath, so an aborted request faults the read rather than hanging.
+- A nullability warning on net5.0 only: `FormUrlEncodedContent` takes `IEnumerable<KeyValuePair<string?, string?>>` there and was tightened to non-nullable in net6.0, so the Stripe checkout form warned on exactly one of the six frameworks. The build is warning-free on all of them now.
+
+## [0.3.0] - 2026-08-15
 
 External purchases: donation-platform payments (Ko-fi, Patreon, manual Boosty) attributed to app users via claim codes, with an unclaimed holding area so received money is never dropped. New package icon.
 
@@ -42,7 +76,7 @@ Found by an adversarial review of this release before it shipped; each one is no
 - **Registering billing twice made every webhook throw** on a duplicate provider key; duplicates are now collapsed.
 - `ClaimByEmailAsync` counts only first-time grants, and `ClaimAsync` reports false when the payment was already processed, instead of reporting a grant that did not happen.
 
-## v0.2.0
+## [0.2.0] - 2026-06-07
 
 Turnkey config-driven setup: a consumer sets provider config values in appsettings and billing works with no boilerplate.
 
@@ -57,7 +91,7 @@ Turnkey config-driven setup: a consumer sets provider config values in appsettin
 - `MapTechTeaStudioBilling(IEndpointRouteBuilder, string basePath)` - maps `POST /billing/webhook/{provider}` and `POST /billing/telegram/bot` endpoints. Ports the provider-agnostic webhook and Telegram Stars bot lifecycle from Chronos into the package itself.
 - Tests: `InMemoryBillingPaymentStoreTests`, `OnPaymentSucceededDelegateTests`, `ConfigOverloadTests`.
 
-## v0.1.0
+## [0.1.0] - 2026-06-07
 
 Initial release. Provider-agnostic payment billing for ASP.NET Core.
 
