@@ -35,11 +35,21 @@ public interface IBillingPaymentStore
     /// (Provider, ProviderPaymentId) - the caller that inserts the row wins, everyone else
     /// gets false - to make exactly-once real.
     /// </summary>
+#if NET5_0_OR_GREATER
     async Task<bool> TryReserveAsync(BillingPaymentRecord pending, CancellationToken ct = default)
     {
         var existing = await GetStatusAsync(pending.Provider, pending.ProviderPaymentId, ct);
         return existing is not (BillingPaymentStatus.Succeeded or BillingPaymentStatus.Refunded);
     }
+#else
+    // .NET Framework and netstandard2.0 have no runtime support for default interface members,
+    // so on those frameworks this is a member you must implement. That is the behaviour the
+    // docs above ask for anyway; the default only ever existed to keep pre-0.3.0 stores
+    // compiling. Reproduce it verbatim if you want the old semantics:
+    //     var existing = await GetStatusAsync(pending.Provider, pending.ProviderPaymentId, ct);
+    //     return existing is not (BillingPaymentStatus.Succeeded or BillingPaymentStatus.Refunded);
+    Task<bool> TryReserveAsync(BillingPaymentRecord pending, CancellationToken ct = default);
+#endif
 
     /// <summary>
     /// Marks a payment refunded. <paramref name="refundContext"/> carries refund-time values,
@@ -53,6 +63,12 @@ public interface IBillingPaymentStore
     /// yet (a refund that overtook its own success webhook) the record is a tombstone and must
     /// still be written, otherwise a late success delivery would fulfill refunded money.
     /// </summary>
+#if NET5_0_OR_GREATER
     Task MarkRefundedAsync(BillingPaymentRecord refundContext, CancellationToken ct = default) =>
         UpsertAsync(refundContext with { Status = BillingPaymentStatus.Refunded }, ct);
+#else
+    // Same story as TryReserveAsync - no default interface members below .NET 5. The default was:
+    //     UpsertAsync(refundContext with { Status = BillingPaymentStatus.Refunded }, ct);
+    Task MarkRefundedAsync(BillingPaymentRecord refundContext, CancellationToken ct = default);
+#endif
 }

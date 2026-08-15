@@ -5,7 +5,7 @@
        cannot drift apart in version, target frameworks or packaging settings. -->
 
   <PropertyGroup>
-    <Version>0.4.0</Version>
+    <Version>0.5.0</Version>
     <Authors>Ronald Ryan</Authors>
     <Company>Tech Tea Studio</Company>
     <Copyright>Copyright © Tech Tea Studio 2026</Copyright>

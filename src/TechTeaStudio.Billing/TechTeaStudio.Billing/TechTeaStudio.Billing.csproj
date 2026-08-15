@@ -4,7 +4,9 @@
     <PackageId>TechTeaStudio.Billing</PackageId>
     <Description>Provider-agnostic payment billing for ASP.NET Core. Hosted checkout and verified webhooks for Stripe, YooKassa, Shopify and Telegram Stars, plus external donation platforms (Ko-fi, Patreon, manual Boosty) with claim-code attribution and an unclaimed-purchase holding area - all behind one IBillingProvider seam with pluggable payment store and fulfillment. Targets net5.0 through net10.0.</Description>
     <PackageTags>billing;payments;stripe;yookassa;shopify;telegram;kofi;patreon;boosty;donations;checkout;webhook;aspnetcore;TechTeaStudio</PackageTags>
-    <PackageReleaseNotes>v0.4.0: Targets net5.0 through net10.0 (was net8.0+). Contracts split into the dependency-free TechTeaStudio.Billing.Abstractions package, pulled in automatically - namespaces are unchanged, so existing code compiles as-is. Webhook endpoints now map through RequestDelegate instead of minimal-API lambdas, which is what makes net5.0/net6.0 possible; behaviour and status codes are identical. Symbol packages, SourceLink and package validation added.
+    <PackageReleaseNotes>v0.5.0: TechTeaStudio.Billing.Abstractions additionally targets netstandard2.0 and net472, so .NET Framework 4.6.2+ assemblies can share the contracts. This package itself stays .NET 5+ - it needs the ASP.NET Core shared framework, which has not run on .NET Framework since ASP.NET Core 3.0.
+
+v0.4.0: Targets net5.0 through net10.0 (was net8.0+). Contracts split into the dependency-free TechTeaStudio.Billing.Abstractions package, pulled in automatically - namespaces are unchanged, so existing code compiles as-is. Webhook endpoints now map through RequestDelegate instead of minimal-API lambdas, which is what makes net5.0/net6.0 possible; behaviour and status codes are identical. Symbol packages, SourceLink and package validation added.
 
 Full changelog: https://github.com/TechTeaStudio/Billing/blob/product/CHANGELOG.md</PackageReleaseNotes>
   </PropertyGroup>

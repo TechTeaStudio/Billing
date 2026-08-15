@@ -50,10 +50,10 @@ That is all most apps need - it pulls in the contracts package below automatical
 
 ## Packages
 
-| Package | What it holds | References |
-|---|---|---|
-| `TechTeaStudio.Billing` | Providers, orchestrator, DI wiring, webhook endpoints, in-memory dev stores | ASP.NET Core shared framework + `.Abstractions` |
-| `TechTeaStudio.Billing.Abstractions` | `IBillingProvider`, `IBillingService`, `IBillingPaymentStore`, `IBillingFulfillment`, `IExternalPurchaseService`, `ITelegramBot`, the attribution stores, the models, `ClaimCode`, `BillingPlanGuard` | Nothing at all |
+| Package | What it holds | Frameworks | References |
+|---|---|---|---|
+| `TechTeaStudio.Billing` | Providers, orchestrator, DI wiring, webhook endpoints, in-memory dev stores | net5.0 → net10.0 | ASP.NET Core shared framework + `.Abstractions` |
+| `TechTeaStudio.Billing.Abstractions` | `IBillingProvider`, `IBillingService`, `IBillingPaymentStore`, `IBillingFulfillment`, `IExternalPurchaseService`, `ITelegramBot`, the attribution stores, the models, `ClaimCode`, `BillingPlanGuard` | netstandard2.0, net472, net5.0 → net10.0 | Nothing at all |
 
 The split exists for one reason: the main package carries `<FrameworkReference Include="Microsoft.AspNetCore.App" />`, and that is contagious. Reference it from a plain domain or application class library just to implement `IBillingFulfillment` and that library is now an ASP.NET Core library too. So the seams you implement live in a package with no dependencies and no framework reference:
 
@@ -111,7 +111,15 @@ Providers whose config section is absent or empty stay dormant - their `IsConfig
 
 ## Target frameworks
 
-Both packages ship `net5.0`, `net6.0`, `net7.0`, `net8.0`, `net9.0` and `net10.0`.
+`TechTeaStudio.Billing` ships `net5.0`, `net6.0`, `net7.0`, `net8.0`, `net9.0` and `net10.0`. `TechTeaStudio.Billing.Abstractions` adds `netstandard2.0` and `net472`.
+
+### .NET Framework
+
+The contracts run on **.NET Framework 4.6.2+**; the library itself does not, and cannot. `TechTeaStudio.Billing` carries `FrameworkReference Microsoft.AspNetCore.App`, and ASP.NET Core has not run on .NET Framework since version 3.0 - the endpoint mapping, `IEndpointRouteBuilder` and `Microsoft.AspNetCore.WebUtilities` all have no .NET Framework asset. Trying to target it fails at restore with `NETSDK1073`.
+
+What the netstandard2.0/net472 assets are for is sharing contracts across a mixed estate: a domain assembly multi-targeting `net472;net8.0` can define its `IBillingFulfillment`, hold `BillingNotification`/`BillingPaymentRecord`, issue codes with `ClaimCode` and check prices with `BillingPlanGuard`, while the ASP.NET Core host that actually receives the webhooks references the same contracts from `net8.0`.
+
+One deliberate API difference on those two frameworks: neither runtime supports default interface members, so `IBillingPaymentStore.TryReserveAsync` and `MarkRefundedAsync` are **required** members there rather than defaulted. That is what the documentation asks production stores to do anyway - the defaults only ever existed so pre-0.3.0 stores kept compiling - and it affects no existing consumer, since no .NET Framework build of this package existed before.
 
 The webhook endpoints are mapped as `RequestDelegate` handlers rather than minimal-API lambdas, because `Results.*` and the `Delegate` overload of `MapPost` are .NET 6+ while the `RequestDelegate` overload has existed since ASP.NET Core 3.0. Routes, status codes and behaviour are identical on every framework; there is exactly one `#if` in the whole library, for the `StreamReader.ReadToEndAsync` overload that gained a `CancellationToken` in .NET 7.
 

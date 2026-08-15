@@ -3,6 +3,26 @@
 All notable changes to this package are documented here.
 Format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-08-15
+
+.NET Framework reach for the contracts. `TechTeaStudio.Billing.Abstractions` now also targets `netstandard2.0` and `net472`, so a .NET Framework 4.6.2+ assembly can share the billing contracts with a modern ASP.NET Core host. The main package is unchanged and stays .NET 5+.
+
+### Added
+
+- `TechTeaStudio.Billing.Abstractions` targets `netstandard2.0` and `net472` alongside `net5.0`-`net10.0`. Still zero package dependencies and no framework reference: `Microsoft.NETFramework.ReferenceAssemblies` is referenced with `PrivateAssets="all"` purely so the `net472` leg builds on the Linux CI runner, and it does not appear in the nuspec.
+- `Polyfills.cs` - an internal `IsExternalInit`, which is what lets the positional records compile below .NET 5.
+- A rejection-sampling `ClaimCode` RNG for the downlevel frameworks, since `RandomNumberGenerator.GetInt32` only exists from .NET Core 3.0. Reducing a raw 32-bit draw with `%` would bias the first `2^32 % 30` characters of the alphabet; the short trailing block is discarded instead. Verified on .NET Framework 4.8 over 160k characters - worst per-character deviation 3.3% against an expected 5333.
+
+### Changed
+
+- **`IBillingPaymentStore.TryReserveAsync` and `MarkRefundedAsync` are required members on `netstandard2.0`/`net472`**, because neither runtime supports default interface members. They keep their default implementations on `net5.0` and up, so no existing consumer is affected - and there was no .NET Framework build before this release. Implementing both is what the documentation asks production stores to do regardless.
+- `ClaimCode.Generate` uses `stackalloc` on .NET 5+ as before, and a `char[8]` below it - avoiding a `System.Memory` dependency was worth more than the allocation, given the method runs once per user.
+
+### Notes
+
+- The main `TechTeaStudio.Billing` package **cannot** target .NET Framework and this is not a gap that can be closed: it needs `Microsoft.AspNetCore.App`, and ASP.NET Core dropped .NET Framework at 3.0. `dotnet restore` on a `net48` target fails with `NETSDK1073`.
+- The downlevel code paths are not exercised by CI - the runner is `ubuntu-latest` and the test project targets net8.0/9.0/10.0. They were validated by hand against .NET Framework 4.8; re-run that check when touching `ClaimCode` or the polyfills.
+
 ## [0.4.0] - 2026-08-15
 
 Reach and packaging. The library now runs on net5.0 through net10.0 instead of net8.0+, and the contracts ship as their own dependency-free package so a domain assembly can implement the seams without being pulled onto the ASP.NET Core shared framework. No behaviour changed and no namespace moved - existing code compiles untouched.
