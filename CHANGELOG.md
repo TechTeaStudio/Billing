@@ -3,6 +3,16 @@
 All notable changes to this package are documented here.
 Format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.3] - 2026-08-23
+
+### Added
+`ITelegramBot.CreateInvoiceLinkAsync(payload)` and its `TelegramStarsBillingProvider` implementation: Bot API `createInvoiceLink`, returning a link that opens the payment sheet directly in any Telegram client - no bot chat, no `/start`. Returns null (deep-link fallback) when the payload does not parse, the plan is unpriced, or Telegram refuses.
+
+Why: the deep-link checkout only shows the START button to a user who has NEVER started the bot. A returning buyer gets the chat opened, the start payload silently dropped, and no invoice unless they type `/start pay-...` by hand - reported live from Chronos production on 2026-08-23.
+
+### Breaking
+`ITelegramBot` gained a member. On net5.0+ nothing to do if you only consume the interface; an external implementation on netstandard2.0/net472 must add the method (returning `Task.FromResult<string?>(null)` preserves the old behaviour).
+
 ## [0.5.2] - 2026-08-15
 
 Version bump only, to give the publish pipeline a version it has not seen. No source, package or metadata changes. `dotnet nuget push` runs with `--skip-duplicate`, so re-pushing an existing version is a silent no-op - a new number is the only way to tell "published" from "skipped".

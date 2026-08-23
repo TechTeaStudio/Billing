@@ -21,4 +21,19 @@ public interface ITelegramBot
 
     /// <summary>Approve a pre_checkout_query (Telegram requires an answer within ~10 s).</summary>
     Task AnswerPreCheckoutAsync(string preCheckoutQueryId, CancellationToken ct = default);
+
+    /// <summary>
+    /// v0.5.3: mint a Telegram invoice LINK for the payload - Bot API createInvoiceLink. Opening
+    /// the returned URL shows the payment sheet directly in any Telegram client, with no bot
+    /// chat and no /start in between.
+    ///
+    /// The deep-link flow this supplements is quietly broken for returning users: a
+    /// t.me/bot?start=payload link only offers the START button to somebody who has NEVER
+    /// started the bot. A returning user just gets the chat opened, the payload is dropped, and
+    /// no invoice ever arrives unless they type "/start payload" by hand.
+    ///
+    /// Returns null when the payload does not parse, the plan is unknown, or Telegram refused -
+    /// callers fall back to the deep link.
+    /// </summary>
+    Task<string?> CreateInvoiceLinkAsync(string payload, CancellationToken ct = default);
 }

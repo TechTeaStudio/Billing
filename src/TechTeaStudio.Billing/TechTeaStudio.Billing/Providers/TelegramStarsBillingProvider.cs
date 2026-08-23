@@ -134,9 +134,67 @@ public sealed class TelegramStarsBillingProvider : IBillingProvider, ITelegramBo
         await CallAsync("sendInvoice", body, ct);
     }
 
+    /// <inheritdoc cref="ITelegramBot.CreateInvoiceLinkAsync"/>
+    public async Task<string?> CreateInvoiceLinkAsync(string payload, CancellationToken ct = default)
+    {
+        if (!TryParsePayload(payload, out _, out var planId)) return null;
+        if (!_opts.Plans.TryGetValue(planId, out var plan)) return null;
+        if (plan.Stars <= 0) return null;
+
+        var body = new
+        {
+            title = plan.Title,
+            description = plan.Description,
+            payload,
+            provider_token = "",   // empty for Telegram Stars (XTR)
+            currency = "XTR",
+            prices = new[] { new { label = plan.Title, amount = plan.Stars } },
+        };
+        return await CallForStringAsync("createInvoiceLink", body, ct);
+    }
+
     public Task AnswerPreCheckoutAsync(string preCheckoutQueryId, CancellationToken ct = default) =>
         CallAsync("answerPreCheckoutQuery",
             new { pre_checkout_query_id = preCheckoutQueryId, ok = true }, ct);
+
+    /// <summary>POST a Bot API method and hand back its string `result`, or null on any failure.
+    /// The sibling <see cref="CallAsync"/> discards the response body - fine for sendInvoice and
+    /// answerPreCheckoutQuery, useless for createInvoiceLink, whose whole point IS the body.</summary>
+    private async Task<string?> CallForStringAsync(string method, object body, CancellationToken ct)
+    {
+        try
+        {
+            using var msg = new HttpRequestMessage(
+                HttpMethod.Post,
+                $"https://api.telegram.org/bot{_opts.BotToken}/{method}")
+            {
+                Content = new StringContent(
+                    JsonSerializer.Serialize(body), Encoding.UTF8, "application/json"),
+            };
+            using var resp = await _http.SendAsync(msg, ct);
+            var raw = await resp.Content.ReadAsStringAsync(ct);
+            if (!resp.IsSuccessStatusCode)
+            {
+                _log.LogWarning("Telegram {Method} failed ({Status}): {Body}",
+                    method, (int)resp.StatusCode, raw);
+                return null;
+            }
+
+            using var doc = JsonDocument.Parse(raw);
+            if (doc.RootElement.TryGetProperty("ok", out var ok) && ok.GetBoolean()
+                && doc.RootElement.TryGetProperty("result", out var result)
+                && result.ValueKind == JsonValueKind.String)
+                return result.GetString();
+
+            _log.LogWarning("Telegram {Method} answered without a string result: {Body}", method, raw);
+            return null;
+        }
+        catch (Exception ex)
+        {
+            _log.LogWarning(ex, "Telegram {Method} errored.", method);
+            return null;
+        }
+    }
 
     private async Task CallAsync(string method, object body, CancellationToken ct)
     {
