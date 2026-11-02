@@ -3,6 +3,31 @@
 All notable changes to this package are documented here.
 Format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - 2026-11-02
+
+Payment hardening after a full audit: stricter webhook validation, refunds that can reach the host, and no more charges that grant nothing. Upgrading is recommended for every host using YooKassa.
+
+### Security
+- **YooKassa**: the webhook id must be a canonical payment id, and the notification now carries the id the API returned. The stored status decides the outcome, never the event name in the unsigned body. A grant also requires `paid`, the configured currency, and a buyer id. Test payments are refused unless the key is a `test_` key.
+- **Stripe**: test-mode events are refused on a live key.
+- **Telegram**: the webhook secret is compared in constant time, and a payment without a charge id grants nothing.
+
+### Added
+- `IBillingRefundFulfillment`, an optional second interface on the host's `IBillingFulfillment`. The pipeline calls it before flipping a payment to Refunded, so a failed revocation stays retryable. Implementations must be idempotent on the payment id.
+- Refund events: YooKassa `refund.succeeded`, Stripe `charge.refunded` and `charge.dispute.created`, Shopify `financial_status: refunded`, Telegram `refunded_payment`. A partial refund is logged and revokes nothing automatically.
+- Stripe `checkout.session.async_payment_succeeded` and `async_payment_failed`, so a delayed method grants when it settles.
+- YooKassa receipts behind `SendReceipt` (off by default) and `ReceiptVatCode`.
+- `TelegramBillingOptions.PreCheckoutDeclinedMessage`.
+
+### Changed
+- **Telegram pre-checkout declines an invoice that no longer matches the plan's current price**, so a stale link takes no money. A payment that did go through at an older price now grants the plan instead of being dropped.
+- **The Telegram bot endpoint answers 500 when a payment could not be processed**, so Telegram delivers it again. It used to acknowledge and lose it.
+- **`StripeBillingOptions.Mode` defaults to `payment`.** The old default charged every period for one grant.
+
+### Breaking
+- `ITelegramBot.AnswerPreCheckoutAsync` takes the query's payload, amount and currency.
+- A host relying on the Stripe `subscription` default must now set `Mode` explicitly.
+
 ## [0.5.3] - 2026-08-23
 
 ### Added

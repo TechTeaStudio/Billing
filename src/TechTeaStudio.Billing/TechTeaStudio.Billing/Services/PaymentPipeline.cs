@@ -63,6 +63,24 @@ internal sealed class PaymentPipeline
                     "recording it anyway so the payment can never be fulfilled.",
                     providerName, note.ProviderPaymentId);
 
+            // Revoke first: a failure answers Failed with the status still unflipped, so the
+            // provider's retry gets here again. A redelivered refund finds Refunded and stops.
+            if (_fulfillment is IBillingRefundFulfillment refunds
+                && await _store.GetStatusAsync(providerName, note.ProviderPaymentId, ct)
+                    != BillingPaymentStatus.Refunded)
+            {
+                try
+                {
+                    await refunds.OnPaymentRefundedAsync(note, ct);
+                }
+                catch (Exception ex)
+                {
+                    _log.LogError(ex, "Revocation failed for provider={Provider} paymentId={PaymentId}.",
+                        providerName, note.ProviderPaymentId);
+                    return PaymentOutcome.Failed;
+                }
+            }
+
             await _store.MarkRefundedAsync(
                 record with { Status = BillingPaymentStatus.Refunded }, ct);
             return PaymentOutcome.Recorded;

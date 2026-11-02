@@ -111,6 +111,16 @@ public sealed class ShopifyBillingProvider : IBillingProvider
                 ? fs.GetString() : null;
             var id = ReadId(order);
 
+            if (financial == "refunded")
+            {
+                var (refundUser, refundPlan) = ReadAttributes(order);
+                var (refundMinor, refundCurrency) = ReadAmount(order);
+                return Task.FromResult<BillingNotification?>(new BillingNotification(
+                    BillingEventKind.PaymentRefunded, refundUser, refundPlan, id, refundMinor, refundCurrency));
+            }
+            if (financial == "partially_refunded")
+                _log.LogWarning("Shopify order {Id} partly refunded: nothing revoked automatically.", id);
+
             var kind = financial == "paid"
                 ? BillingEventKind.PaymentSucceeded : BillingEventKind.Unknown;
             if (kind == BillingEventKind.Unknown)

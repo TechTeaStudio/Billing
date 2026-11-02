@@ -41,6 +41,11 @@ public sealed class StripeBillingProvider : IBillingProvider
             ?? throw new InvalidOperationException(
                 $"No Stripe price configured for plan '{req.PlanId}'.");
 
+        if (!string.Equals(_opts.Mode, "payment", StringComparison.OrdinalIgnoreCase))
+            _log.LogWarning(
+                "Stripe Mode is '{Mode}': the customer is charged every period, and only the first checkout is granted here.",
+                _opts.Mode);
+
         var form = new Dictionary<string, string>
         {
             ["mode"] = _opts.Mode,
@@ -79,12 +84,12 @@ public sealed class StripeBillingProvider : IBillingProvider
         return new CheckoutSession(url, Name, id);
     }
 
-    public Task<BillingNotification?> ParseNotificationAsync(
+    public async Task<BillingNotification?> ParseNotificationAsync(
         string rawBody, IReadOnlyDictionary<string, string> headers, CancellationToken ct = default)
     {
         headers.TryGetValue("Stripe-Signature", out var sig);
         if (!StripeSignature.Verify(rawBody, sig, _opts.WebhookSecret, DateTimeOffset.UtcNow, TimeSpan.FromMinutes(5)))
-            return Task.FromResult<BillingNotification?>(null);
+            return null;
 
         try
         {
@@ -93,14 +98,36 @@ public sealed class StripeBillingProvider : IBillingProvider
             var type = root.GetProperty("type").GetString();
             var obj = root.GetProperty("data").GetProperty("object");
 
+            // A test-mode event on a live key is a webhook endpoint pointed at the wrong place, and
+            // it must not grant real entitlements.
+            if (root.TryGetProperty("livemode", out var live) && live.ValueKind == JsonValueKind.False
+                && IsLiveKey)
+            {
+                _log.LogWarning("Stripe test-mode event {Type} refused on a live key.", type);
+                return Irrelevant();
+            }
+
+            switch (type)
+            {
+                case "charge.refunded":
+                    if (obj.TryGetProperty("refunded", out var full) && full.ValueKind == JsonValueKind.True)
+                        return await RefundFromIntentAsync(obj, ct);
+                    _log.LogWarning("Stripe charge partly refunded: nothing revoked automatically.");
+                    return Irrelevant();
+                case "charge.dispute.created":
+                    return await RefundFromIntentAsync(obj, ct);
+            }
+
             var kind = type switch
             {
                 "checkout.session.completed" => BillingEventKind.PaymentSucceeded,
+                // A delayed method (a bank debit, say) completes unpaid and settles later.
+                "checkout.session.async_payment_succeeded" => BillingEventKind.PaymentSucceeded,
+                "checkout.session.async_payment_failed" => BillingEventKind.PaymentFailed,
                 "checkout.session.expired" => BillingEventKind.PaymentCanceled,
                 _ => BillingEventKind.Unknown,
             };
-            if (kind == BillingEventKind.Unknown)
-                return Task.FromResult<BillingNotification?>(Irrelevant());
+            if (kind == BillingEventKind.Unknown) return Irrelevant();
 
             // A completed session must actually be paid (free trials / async methods report
             // "unpaid" / "no_payment_required") - otherwise treat it as a non-grant.
@@ -109,19 +136,62 @@ public sealed class StripeBillingProvider : IBillingProvider
                 && ps.GetString() is not "paid")
                 kind = BillingEventKind.PaymentFailed;
 
-            var id = obj.GetProperty("id").GetString() ?? "";
-            long amount = obj.TryGetProperty("amount_total", out var at) &&
-                          at.ValueKind == JsonValueKind.Number ? at.GetInt64() : 0;
-            var currency = obj.TryGetProperty("currency", out var cur)
-                ? (cur.GetString() ?? "").ToUpperInvariant() : "";
-            return Task.FromResult<BillingNotification?>(
-                new BillingNotification(kind, ReadUserId(obj), ReadPlanId(obj), id, amount, currency));
+            var (amount, currency) = ReadSessionAmount(obj);
+            return new BillingNotification(
+                kind, ReadUserId(obj), ReadPlanId(obj), obj.GetProperty("id").GetString() ?? "", amount, currency);
         }
         catch (Exception ex)
         {
             _log.LogWarning(ex, "Stripe webhook body parse failed after a valid signature.");
-            return Task.FromResult<BillingNotification?>(null);
+            return null;
         }
+    }
+
+    private bool IsLiveKey =>
+        _opts.SecretKey?.StartsWith("sk_live_", StringComparison.Ordinal) == true
+        || _opts.SecretKey?.StartsWith("rk_live_", StringComparison.Ordinal) == true;
+
+    /// <summary>A charge or a dispute knows its payment intent, while the payment was recorded under
+    /// its checkout session, so ask Stripe which session that intent belongs to. Null on a failed
+    /// lookup, which answers 400 and makes Stripe deliver the event again.</summary>
+    private async Task<BillingNotification?> RefundFromIntentAsync(JsonElement obj, CancellationToken ct)
+    {
+        var intent = obj.TryGetProperty("payment_intent", out var pi) && pi.ValueKind == JsonValueKind.String
+            ? pi.GetString() : null;
+        if (string.IsNullOrEmpty(intent)) return Irrelevant();
+
+        using var msg = new HttpRequestMessage(
+            HttpMethod.Get,
+            $"{ApiBase}/checkout/sessions?limit=1&payment_intent={Uri.EscapeDataString(intent)}");
+        msg.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _opts.SecretKey);
+
+        using var resp = await _http.SendAsync(msg, ct);
+        var json = await resp.Content.ReadAsStringAsync(ct);
+        if (!resp.IsSuccessStatusCode)
+        {
+            _log.LogWarning("Stripe session lookup failed ({Status}) for {Intent}.", (int)resp.StatusCode, intent);
+            return null;
+        }
+
+        using var doc = JsonDocument.Parse(json);
+        var data = doc.RootElement.GetProperty("data");
+        // A charge made outside our checkout has no session and nothing of ours to revoke.
+        if (data.GetArrayLength() == 0) return Irrelevant();
+
+        var session = data[0];
+        var (amount, currency) = ReadSessionAmount(session);
+        return new BillingNotification(
+            BillingEventKind.PaymentRefunded, ReadUserId(session), ReadPlanId(session),
+            session.GetProperty("id").GetString() ?? "", amount, currency);
+    }
+
+    private static (long amount, string currency) ReadSessionAmount(JsonElement session)
+    {
+        long amount = session.TryGetProperty("amount_total", out var at) &&
+                      at.ValueKind == JsonValueKind.Number ? at.GetInt64() : 0;
+        var currency = session.TryGetProperty("currency", out var cur)
+            ? (cur.GetString() ?? "").ToUpperInvariant() : "";
+        return (amount, currency);
     }
 
     private string? PriceFor(string planId) =>

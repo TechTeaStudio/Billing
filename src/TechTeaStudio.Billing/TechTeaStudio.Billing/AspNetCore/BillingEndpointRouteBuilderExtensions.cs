@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using TechTeaStudio.Billing.Abstractions;
 
 namespace TechTeaStudio.Billing.AspNetCore;
@@ -68,8 +69,9 @@ public static class BillingEndpointRouteBuilderExtensions
     // Telegram posts Bot API updates here (registered via setWebhook). Drives the Stars
     // lifecycle: approve pre_checkout_query, send the XTR invoice on "/start <payload>",
     // and on successful_payment route back through IBillingService to grant the tier.
-    // Always returns 200 so Telegram stops retrying; forged updates are dropped by
-    // the webhook-secret check.
+    // Returns 200 so Telegram stops retrying, except when a payment could not be processed: the
+    // Stars are already taken, so that answers 500 and Telegram delivers the update again. Forged
+    // updates are dropped by the webhook-secret check.
     private static async Task HandleTelegramUpdateAsync(HttpContext ctx)
     {
         var billing = ctx.RequestServices.GetRequiredService<IBillingService>();
@@ -96,15 +98,21 @@ public static class BillingEndpointRouteBuilderExtensions
             if (root.TryGetProperty("pre_checkout_query", out var pcq)
                 && pcq.TryGetProperty("id", out var pcqId))
             {
-                await bot.AnswerPreCheckoutAsync(pcqId.GetString() ?? "", ctx.RequestAborted);
+                var payload = pcq.TryGetProperty("invoice_payload", out var pl) ? pl.GetString() : null;
+                var currency = pcq.TryGetProperty("currency", out var cur) ? cur.GetString() : null;
+                var amount = pcq.TryGetProperty("total_amount", out var ta)
+                             && ta.ValueKind == JsonValueKind.Number ? ta.GetInt64() : 0;
+                await bot.AnswerPreCheckoutAsync(
+                    pcqId.GetString() ?? "", payload, amount, currency, ctx.RequestAborted);
                 return;
             }
 
             if (root.TryGetProperty("message", out var msg))
             {
-                if (msg.TryGetProperty("successful_payment", out _))
+                if (msg.TryGetProperty("successful_payment", out _)
+                    || msg.TryGetProperty("refunded_payment", out _))
                 {
-                    await billing.HandleWebhookAsync("telegram", body, headers, ctx.RequestAborted);
+                    await ProcessTelegramPaymentAsync(ctx, billing, body, headers);
                     return;
                 }
 
@@ -124,6 +132,22 @@ public static class BillingEndpointRouteBuilderExtensions
             }
         }
         catch { /* malformed update - ack anyway so Telegram stops retrying */ }
+    }
+
+    private static async Task ProcessTelegramPaymentAsync(
+        HttpContext ctx, IBillingService billing, string body, IReadOnlyDictionary<string, string> headers)
+    {
+        try
+        {
+            if (await billing.HandleWebhookAsync("telegram", body, headers, ctx.RequestAborted)) return;
+        }
+        catch (Exception ex)
+        {
+            ctx.RequestServices.GetService<ILoggerFactory>()
+                ?.CreateLogger(typeof(BillingEndpointRouteBuilderExtensions))
+                .LogError(ex, "Telegram payment update could not be processed; asking for a redelivery.");
+        }
+        ctx.Response.StatusCode = StatusCodes.Status500InternalServerError;
     }
 
     private static async Task<string> ReadBodyAsync(HttpContext ctx)

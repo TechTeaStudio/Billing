@@ -19,8 +19,16 @@ public interface ITelegramBot
     /// <paramref name="payload"/>.</summary>
     Task SendInvoiceAsync(long chatId, string payload, CancellationToken ct = default);
 
-    /// <summary>Approve a pre_checkout_query (Telegram requires an answer within ~10 s).</summary>
-    Task AnswerPreCheckoutAsync(string preCheckoutQueryId, CancellationToken ct = default);
+    /// <summary>Answer a pre_checkout_query (Telegram requires an answer within ~10 s). This is the
+    /// last moment a charge can still be stopped: an invoice minted before a price change, or for
+    /// a plan that is gone, is declined here instead of taking money for it.</summary>
+    /// <param name="preCheckoutQueryId">The query's id.</param>
+    /// <param name="payload">The query's invoice_payload.</param>
+    /// <param name="totalAmount">The query's total_amount, in whole Stars.</param>
+    /// <param name="currency">The query's currency.</param>
+    Task AnswerPreCheckoutAsync(
+        string preCheckoutQueryId, string? payload, long totalAmount, string? currency,
+        CancellationToken ct = default);
 
     /// <summary>
     /// v0.5.3: mint a Telegram invoice LINK for the payload - Bot API createInvoiceLink. Opening

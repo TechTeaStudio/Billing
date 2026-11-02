@@ -10,6 +10,14 @@ public sealed class YooKassaBillingOptions
     /// <summary>Currency code, e.g. "RUB". Defaults to "RUB".</summary>
     public string Currency { get; set; } = "RUB";
 
+    /// <summary>Attach a 54-FZ receipt to every payment. Turn it on for a shop with online receipts
+    /// connected; YooKassa then requires the block and rejects payments without it. Leave it off
+    /// for a self-employed shop, which issues receipts through Moy Nalog.</summary>
+    public bool SendReceipt { get; set; }
+
+    /// <summary>YooKassa vat_code for the receipt line: 1 is "without VAT".</summary>
+    public int ReceiptVatCode { get; set; } = 1;
+
     /// <summary>Maps a planId to the amount charged in major units.
     /// Lookups are case-insensitive.</summary>
     public Dictionary<string, decimal> Amounts { get; set; } =

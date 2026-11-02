@@ -26,6 +26,11 @@ public sealed class TelegramBillingOptions
     /// When set, updates without a matching token are rejected. Required for IsConfigured.</summary>
     public string? WebhookSecret { get; set; }
 
+    /// <summary>What the payment sheet shows when an invoice no longer matches the current price
+    /// of its plan.</summary>
+    public string PreCheckoutDeclinedMessage { get; set; } =
+        "The price has changed. Please start the purchase again.";
+
     /// <summary>Maps a planId to its Stars price and invoice text.
     /// Lookups are case-insensitive.</summary>
     public Dictionary<string, TelegramStarsPlan> Plans { get; set; } =

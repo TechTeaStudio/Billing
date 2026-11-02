@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
@@ -69,35 +70,44 @@ public sealed class TelegramStarsBillingProvider : IBillingProvider, ITelegramBo
         try
         {
             using var doc = JsonDocument.Parse(rawBody);
-            if (!doc.RootElement.TryGetProperty("message", out var msg) ||
-                !msg.TryGetProperty("successful_payment", out var sp))
+            if (!doc.RootElement.TryGetProperty("message", out var msg))
                 return Task.FromResult<BillingNotification?>(Irrelevant());
+
+            BillingEventKind kind;
+            if (msg.TryGetProperty("successful_payment", out var sp)) kind = BillingEventKind.PaymentSucceeded;
+            else if (msg.TryGetProperty("refunded_payment", out sp)) kind = BillingEventKind.PaymentRefunded;
+            else return Task.FromResult<BillingNotification?>(Irrelevant());
 
             var payload = sp.TryGetProperty("invoice_payload", out var p)
                 ? p.GetString() : null;
             if (!TryParsePayload(payload, out var userId, out var planId))
                 return Task.FromResult<BillingNotification?>(Irrelevant());
 
+            // The charge id is the idempotency key. Without one, nothing could stop a repeat.
             var chargeId = sp.TryGetProperty("telegram_payment_charge_id", out var ci)
                 ? ci.GetString() ?? "" : "";
+            if (string.IsNullOrEmpty(chargeId))
+            {
+                _log.LogWarning("Telegram payment update without a charge id refused.");
+                return Task.FromResult<BillingNotification?>(Irrelevant());
+            }
+
             long amount = sp.TryGetProperty("total_amount", out var ta) &&
                           ta.ValueKind == JsonValueKind.Number ? ta.GetInt64() : 0;
             var currency = sp.TryGetProperty("currency", out var cur)
                 ? cur.GetString() ?? "XTR" : "XTR";
 
-            // Defence in depth: the bot sets the invoice price from the plan, so an amount
-            // below the configured Stars for that plan means a forged / tampered update.
-            if (amount < StarsFor(planId))
-            {
+            // Telegram has already taken the Stars by the time this arrives, and only the holder of
+            // the webhook secret can send it. A stale price is stopped at the pre-checkout answer,
+            // so an amount below today's can only be a price changed in the seconds in between:
+            // the buyer accepted the price on the sheet, and they get what they paid for.
+            if (kind == BillingEventKind.PaymentSucceeded && amount < StarsFor(planId))
                 _log.LogWarning(
-                    "Telegram payment {Charge} underpaid for plan '{Plan}': {Amount} < {Expected} XTR.",
+                    "Telegram payment {Charge} for plan '{Plan}' paid the old price: {Amount} < {Expected} XTR.",
                     chargeId, planId, amount, StarsFor(planId));
-                return Task.FromResult<BillingNotification?>(Irrelevant());
-            }
 
             return Task.FromResult<BillingNotification?>(
-                new BillingNotification(BillingEventKind.PaymentSucceeded, userId, planId,
-                    chargeId, amount, currency));
+                new BillingNotification(kind, userId, planId, chargeId, amount, currency));
         }
         catch (Exception ex)
         {
@@ -112,7 +122,8 @@ public sealed class TelegramStarsBillingProvider : IBillingProvider, ITelegramBo
     {
         if (string.IsNullOrWhiteSpace(_opts.WebhookSecret)) return false;
         headers.TryGetValue("X-Telegram-Bot-Api-Secret-Token", out var token);
-        return string.Equals(token, _opts.WebhookSecret, StringComparison.Ordinal);
+        return CryptographicOperations.FixedTimeEquals(
+            Encoding.UTF8.GetBytes(token ?? ""), Encoding.UTF8.GetBytes(_opts.WebhookSecret));
     }
 
     public async Task SendInvoiceAsync(long chatId, string payload, CancellationToken ct = default)
@@ -153,9 +164,30 @@ public sealed class TelegramStarsBillingProvider : IBillingProvider, ITelegramBo
         return await CallForStringAsync("createInvoiceLink", body, ct);
     }
 
-    public Task AnswerPreCheckoutAsync(string preCheckoutQueryId, CancellationToken ct = default) =>
-        CallAsync("answerPreCheckoutQuery",
-            new { pre_checkout_query_id = preCheckoutQueryId, ok = true }, ct);
+    public Task AnswerPreCheckoutAsync(
+        string preCheckoutQueryId, string? payload, long totalAmount, string? currency,
+        CancellationToken ct = default)
+    {
+        var current = TryParsePayload(payload, out _, out var planId)
+            && string.Equals(currency, "XTR", StringComparison.Ordinal)
+            && StarsFor(planId) > 0
+            && totalAmount == StarsFor(planId);
+
+        if (current)
+            return CallAsync("answerPreCheckoutQuery",
+                new { pre_checkout_query_id = preCheckoutQueryId, ok = true }, ct);
+
+        _log.LogWarning(
+            "Telegram pre-checkout declined for plan '{Plan}': {Amount} {Currency}, current price {Expected} XTR.",
+            planId, totalAmount, currency, StarsFor(planId));
+        return CallAsync("answerPreCheckoutQuery",
+            new
+            {
+                pre_checkout_query_id = preCheckoutQueryId,
+                ok = false,
+                error_message = _opts.PreCheckoutDeclinedMessage,
+            }, ct);
+    }
 
     /// <summary>POST a Bot API method and hand back its string `result`, or null on any failure.
     /// The sibling <see cref="CallAsync"/> discards the response body - fine for sendInvoice and
