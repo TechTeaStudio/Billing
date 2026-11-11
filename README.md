@@ -121,7 +121,7 @@ What the netstandard2.0/net472 assets are for is sharing contracts across a mixe
 
 One deliberate API difference on those two frameworks: neither runtime supports default interface members, so `IBillingPaymentStore.TryReserveAsync` and `MarkRefundedAsync` are **required** members there rather than defaulted. That is what the documentation asks production stores to do anyway - the defaults only ever existed so pre-0.3.0 stores kept compiling - and it affects no existing consumer, since no .NET Framework build of this package existed before.
 
-The webhook endpoints are mapped as `RequestDelegate` handlers rather than minimal-API lambdas, because `Results.*` and the `Delegate` overload of `MapPost` are .NET 6+ while the `RequestDelegate` overload has existed since ASP.NET Core 3.0. Routes, status codes and behaviour are identical on every framework; there is exactly one `#if` in the whole library, for the `StreamReader.ReadToEndAsync` overload that gained a `CancellationToken` in .NET 7.
+The webhook endpoints are mapped as `RequestDelegate` handlers rather than minimal-API lambdas, because `Results.*` and the `Delegate` overload of `MapPost` are .NET 6+ while the `RequestDelegate` overload has existed since ASP.NET Core 3.0. Routes, status codes and behaviour are identical on every framework. The main package has one behavioural `#if`, for the `StreamReader.ReadToEndAsync` overload that gained a `CancellationToken` in .NET 7; its only other `#if` blocks add the `net11.0` outcome unions described below, which older targets simply do not have.
 
 Building the older frameworks needs no old SDK installed - the .NET 10 SDK downloads the reference packs from NuGet. Note that **net5.0, net6.0 and net7.0 are out of support from Microsoft**. They are carried so a host pinned to an older runtime can still take fixes from this library; if you get to choose, target net8.0 or net10.0.
 
@@ -205,6 +205,44 @@ Gateway checkouts know the buyer up front. Donation platforms do not: a Ko-fi pa
 4. **Boosty.** Boosty has NO official API and NO webhooks (everything on api.boosty.to is reverse-engineered from the SPA and unstable, with a browser-session token). The supported path is therefore manual: the creator sees the payment in the Boosty dashboard or the official @boosty_to_bot Telegram notifications and records it with `SubmitAsync(purchase, userId)` - same idempotent pipeline, provider name `"boosty"`. Claim codes still help: ask subscribers to send theirs via Boosty DM.
 
 Production checklist: the three attribution stores default to in-memory dev implementations - swap ALL of them (`UseClaimCodeStore<T>()`, `UseExternalIdentityLinkStore<T>()`, `UseUnclaimedPurchaseStore<T>()`) with database-backed stores, exactly like `UsePaymentStore<T>()`. Ko-fi cannot notify you about refunds or membership endings, so grant time-boxed entitlements keyed to the last renewal payment and revoke manually on refunds; Patreon refunds arrive via `members:update` and are recorded as `Refunded` automatically; Patreon decline states are unreliable - reconcile periodically against `GET /api/oauth2/v2/campaigns/{id}/members`.
+
+## Outcome unions (.NET 11)
+
+On `net11.0` the two calls that answer with a bool have a twin that says what actually happened, as a C# 15 union. Each is a closed set, so one `switch` covers it and the compiler reports a missing case (CS8509).
+
+```csharp
+// IBillingWebhookProcessor - the twin of IBillingService.HandleWebhookAsync
+WebhookOutcome outcome = await webhooks.ProcessWebhookAsync(provider, body, headers, ct);
+
+IResult result = outcome switch
+{
+    WebhookFulfilled f        => Results.Ok(),                  // f.Notification was granted just now
+    WebhookAlreadyProcessed   => Results.Ok(),                  // duplicate, nothing granted
+    WebhookRecorded r         => Results.Ok(),                  // cancel, failure or refund: r.Notification.Kind
+    WebhookIgnored            => Results.Ok(),                  // verified, irrelevant event
+    WebhookRejected           => Results.BadRequest(),          // not verified or not understood
+    WebhookFailed             => Results.StatusCode(500),       // fulfillment threw, the provider retries
+};
+```
+
+```csharp
+// IExternalPurchaseClaims - the twin of IExternalPurchaseService.ClaimAsync
+ClaimOutcome claim = await claims.ClaimHeldAsync("kofi", paymentId, userId, productIdOverride: null, ct);
+
+string message = claim switch
+{
+    ClaimFulfilled f          => $"Granted {f.ProductId}.",
+    ClaimAlreadyProcessed     => "That payment was already fulfilled or refunded. The stale hold is gone.",
+    ClaimNotHeld              => "Nothing is held under that payment id.",
+    ClaimNeedsProduct n       => $"'{n.Held.Purchase.PlatformProduct}' is not mapped. Claim again with a product id.",
+    ClaimFailed               => "Fulfillment failed. The purchase is held again, retry later.",
+};
+```
+
+- **The bool APIs remain, and on every target below `net11.0` they are the only ones.** `HandleWebhookAsync` and `ClaimAsync` run the same code: the first returns true for every webhook outcome except `WebhookRejected` and `WebhookFailed`, the second returns true only for `ClaimFulfilled`. `IBillingService` and `IExternalPurchaseService` gained no members, so existing fakes keep compiling. `MapTechTeaStudioBilling` still answers 200 or 400 from the bool.
+- **Both interfaces are registered by `AddTechTeaStudioBilling`** as their own services. A host that replaces `IExternalPurchaseService` with its own implementation still gets the library's implementation behind `IExternalPurchaseClaims`.
+- **No `null` arm is required.** Measured on SDK 11.0.100 with nullable enabled: a switch that lists every case and has neither a `null` arm nor a discard compiles without CS8509 or CS8655, also when the union comes back from a method. The library never returns an empty union. A `default(WebhookOutcome)` has null contents and matches no case, so a switch without a `null` arm throws `SwitchExpressionException` for it; add `null => ...` only if your own code can produce a `default` union.
+- **Security.** `WebhookRejected` and `WebhookIgnored` carry the provider name and nothing from the body. A rejection is one case with no reason, so a response cannot tell a caller how far a forged payload got. A case that carries a notification exists only after the provider verified the payload. Exceptions that escape `HandleWebhookAsync` (a store that is down, a cancelled request) escape `ProcessWebhookAsync` too and are never turned into a case.
 
 ## The two seams you implement
 

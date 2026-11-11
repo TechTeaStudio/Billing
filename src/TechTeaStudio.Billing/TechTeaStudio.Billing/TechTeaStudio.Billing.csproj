@@ -4,10 +4,12 @@
     <PackageId>TechTeaStudio.Billing</PackageId>
     <!-- Must be a literal tag in this file - the publish workflow greps for it. Keep in sync
          with TechTeaStudio.Billing.Abstractions.csproj; see the note in Directory.Build.props. -->
-    <Version>0.6.1</Version>
+    <Version>0.7.0</Version>
     <Description>Provider-agnostic payment billing for ASP.NET Core. Hosted checkout and verified webhooks for Stripe, YooKassa, Shopify and Telegram Stars, plus external donation platforms (Ko-fi, Patreon, manual Boosty) with claim-code attribution and an unclaimed-purchase holding area - all behind one IBillingProvider seam with pluggable payment store and fulfillment. Targets net5.0 through net11.0.</Description>
     <PackageTags>billing;payments;stripe;yookassa;shopify;telegram;kofi;patreon;boosty;donations;checkout;webhook;aspnetcore;TechTeaStudio</PackageTags>
-    <PackageReleaseNotes>v0.6.1: Adds the net11.0 target. No API or behaviour change.
+    <PackageReleaseNotes>v0.7.0: C# 15 union outcomes, net11.0 only. IBillingWebhookProcessor.ProcessWebhookAsync returns a WebhookOutcome and IExternalPurchaseClaims.ClaimHeldAsync returns a ClaimOutcome, so a host can switch over what happened instead of reading a bool. Both are registered by AddTechTeaStudioBilling and run the same code as HandleWebhookAsync and ClaimAsync, which stay on every target. Older targets are unchanged.
+
+v0.6.1: Adds the net11.0 target. No API or behaviour change.
 
 v0.6.0: Payment hardening: strict YooKassa webhook ids, refund events on every provider through the optional IBillingRefundFulfillment, Telegram pre-checkout declines stale invoices and failed payments are redelivered, Stripe Mode defaults to payment. BREAKING: ITelegramBot.AnswerPreCheckoutAsync takes payload, amount and currency.
 

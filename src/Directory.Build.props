@@ -55,8 +55,9 @@
          locally rewrites source paths and breaks step-through debugging in the IDE. -->
     <ContinuousIntegrationBuild Condition="'$(GITHUB_ACTIONS)' == 'true'">true</ContinuousIntegrationBuild>
     <Deterministic>true</Deterministic>
-    <!-- Fails the pack if the seven target frameworks do not expose the same public API, which is
-         the failure mode a TFM-conditional (#if) most easily introduces. -->
+    <!-- Fails the pack if a target framework drops public API that an older one exposes, which is
+         the failure mode a TFM-conditional (#if) most easily introduces. The rule it enforces:
+         a newer target may add API, never drop it. -->
     <EnablePackageValidation>true</EnablePackageValidation>
   </PropertyGroup>
 

@@ -11,6 +11,9 @@ namespace TechTeaStudio.Billing.Services;
 /// so claims and manual submissions share the webhook path's exactly-once guarantee.
 /// </summary>
 internal sealed class ExternalPurchaseService : IExternalPurchaseService
+#if NET11_0_OR_GREATER
+    , IExternalPurchaseClaims
+#endif
 {
     private readonly IClaimCodeStore _codes;
     private readonly IExternalIdentityLinkStore _links;
@@ -94,11 +97,11 @@ internal sealed class ExternalPurchaseService : IExternalPurchaseService
         var granted = 0;
         foreach (var h in held)
         {
-            var outcome = await ClaimCoreAsync(
+            var (result, _) = await ClaimCoreAsync(
                 providerKey, h.Purchase.ProviderPaymentId, userId, null, ct);
             // Only a first-time grant counts: a payment that was already fulfilled or
             // refunded consumes its stale hold without giving the user anything.
-            if (outcome == PaymentOutcome.Fulfilled) granted++;
+            if (result == ClaimResult.Fulfilled) granted++;
         }
         return granted;
     }
@@ -106,9 +109,32 @@ internal sealed class ExternalPurchaseService : IExternalPurchaseService
     public async Task<bool> ClaimAsync(
         string provider, string providerPaymentId, Guid userId,
         string? productIdOverride = null, CancellationToken ct = default) =>
-        await ClaimCoreAsync(
-            ProviderKey(provider), providerPaymentId, userId, productIdOverride, ct)
-            == PaymentOutcome.Fulfilled;
+        (await ClaimCoreAsync(
+            ProviderKey(provider), providerPaymentId, userId, productIdOverride, ct))
+            .Result == ClaimResult.Fulfilled;
+
+#if NET11_0_OR_GREATER
+    public async Task<ClaimOutcome> ClaimHeldAsync(
+        string provider, string providerPaymentId, Guid userId,
+        string? productIdOverride = null, CancellationToken ct = default)
+    {
+        var providerKey = ProviderKey(provider);
+        var (result, taken) = await ClaimCoreAsync(
+            providerKey, providerPaymentId, userId, productIdOverride, ct);
+
+        if (taken is null) return new ClaimNotHeld(providerKey, providerPaymentId);
+
+        return result switch
+        {
+            // Fulfilled implies a non-blank product id: the core refuses to grant without one.
+            ClaimResult.Fulfilled => new ClaimFulfilled(
+                taken.Purchase, (productIdOverride ?? taken.Purchase.ProductId)!),
+            ClaimResult.AlreadyProcessed => new ClaimAlreadyProcessed(taken.Purchase),
+            ClaimResult.NeedsProduct => new ClaimNeedsProduct(taken),
+            _ => new ClaimFailed(taken),
+        };
+    }
+#endif
 
     public async Task<bool> SubmitAsync(
         ExternalPurchase purchase, Guid userId, CancellationToken ct = default)
@@ -141,19 +167,19 @@ internal sealed class ExternalPurchaseService : IExternalPurchaseService
     /// <summary>Claims one held purchase. The hold is only consumed when the payment reached
     /// a terminal outcome; ANY failure - including an exception from a flaky store - puts it
     /// back, because a held purchase is money already received and must never vanish.</summary>
-    private async Task<PaymentOutcome> ClaimCoreAsync(
+    private async Task<(ClaimResult Result, UnclaimedPurchase? Taken)> ClaimCoreAsync(
         string providerKey, string providerPaymentId, Guid userId,
         string? productIdOverride, CancellationToken ct)
     {
         var taken = await _unclaimed.TakeAsync(providerKey, providerPaymentId, ct);
-        if (taken is null) return PaymentOutcome.Failed;
+        if (taken is null) return (ClaimResult.NotHeld, null);
 
         var productId = productIdOverride ?? taken.Purchase.ProductId;
         if (string.IsNullOrWhiteSpace(productId))
         {
             // Still no product to grant - keep it held for an admin with an override.
             await ReHoldAsync(taken);
-            return PaymentOutcome.Failed;
+            return (ClaimResult.NeedsProduct, taken);
         }
 
         PaymentOutcome outcome;
@@ -174,13 +200,13 @@ internal sealed class ExternalPurchaseService : IExternalPurchaseService
                 "Claim of {Provider} payment {PaymentId} threw - re-holding the purchase.",
                 providerKey, providerPaymentId);
             await ReHoldAsync(taken);
-            return PaymentOutcome.Failed;
+            return (ClaimResult.Failed, taken);
         }
 
         if (outcome == PaymentOutcome.Failed)
         {
             await ReHoldAsync(taken);
-            return outcome;
+            return (ClaimResult.Failed, taken);
         }
 
         // Persist the identity so refunds and the next renewal find this account. Admin
@@ -189,7 +215,29 @@ internal sealed class ExternalPurchaseService : IExternalPurchaseService
         if (NormalizeEmail(taken.Purchase.BuyerEmail) is { } email)
             await _links.LinkAsync(providerKey, email, userId, CancellationToken.None);
 
-        return outcome;
+        // The hold is consumed either way; only a first-time grant is Fulfilled.
+        return (outcome == PaymentOutcome.Fulfilled
+            ? ClaimResult.Fulfilled
+            : ClaimResult.AlreadyProcessed, taken);
+    }
+
+    /// <summary>What <see cref="ClaimCoreAsync"/> did with one hold.</summary>
+    private enum ClaimResult
+    {
+        /// <summary>Fulfillment ran for the first time; the hold is consumed.</summary>
+        Fulfilled,
+
+        /// <summary>The payment was already terminal; the stale hold is consumed.</summary>
+        AlreadyProcessed,
+
+        /// <summary>Nothing was held under that provider and payment id.</summary>
+        NotHeld,
+
+        /// <summary>No product id to grant; the purchase is held again.</summary>
+        NeedsProduct,
+
+        /// <summary>Fulfillment failed or a store threw; the purchase is held again.</summary>
+        Failed,
     }
 
     /// <summary>Puts a taken purchase back. Deliberately uncancellable: the usual reason the

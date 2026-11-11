@@ -3,6 +3,19 @@
 All notable changes to this package are documented here.
 Format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2026-11-11
+
+Typed outcomes for the two calls that used to answer with a bool. On .NET 11 a webhook and a claim of a held purchase can now say what happened as a C# 15 union, so the host writes one exhaustive `switch` and the compiler flags a case it forgot. The bool APIs stay everywhere and run the same code.
+
+### Added
+
+- **`WebhookOutcome`** union with the cases `WebhookFulfilled`, `WebhookAlreadyProcessed`, `WebhookRecorded`, `WebhookIgnored`, `WebhookRejected` and `WebhookFailed`. `WebhookRejected` and `WebhookIgnored` carry the provider name only, never body content, and a rejection gives no reason.
+- **`ClaimOutcome`** union with the cases `ClaimFulfilled`, `ClaimAlreadyProcessed`, `ClaimNotHeld`, `ClaimNeedsProduct` and `ClaimFailed`.
+- **`IBillingWebhookProcessor.ProcessWebhookAsync`**, the union-returning twin of `IBillingService.HandleWebhookAsync`. `HandleWebhookAsync` returns true exactly when the outcome is not `WebhookRejected` and not `WebhookFailed`.
+- **`IExternalPurchaseClaims.ClaimHeldAsync`**, the union-returning twin of `IExternalPurchaseService.ClaimAsync`. `ClaimAsync` returns true exactly when the outcome is `ClaimFulfilled`.
+- `AddTechTeaStudioBilling` registers both interfaces. They are separate registrations, so a host that replaces `IExternalPurchaseService` still gets the library's implementation behind `IExternalPurchaseClaims`.
+- All of the above is net11.0 only; older targets unchanged. `IBillingService` and `IExternalPurchaseService` gained no members on any target, so hand-written fakes keep compiling.
+
 ## [0.6.1] - 2026-11-11
 
 .NET 11 support. Both packages gain a `net11.0` target; nothing else changes, and every older target stays.

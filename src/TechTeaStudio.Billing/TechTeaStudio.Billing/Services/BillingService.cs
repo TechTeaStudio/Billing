@@ -10,6 +10,9 @@ namespace TechTeaStudio.Billing.Services;
 /// <see cref="IBillingPaymentStore"/>.
 /// </summary>
 public sealed class BillingService : IBillingService
+#if NET11_0_OR_GREATER
+    , IBillingWebhookProcessor
+#endif
 {
     private readonly IReadOnlyDictionary<string, IBillingProvider> _providers;
     private readonly PaymentPipeline _pipeline;
@@ -63,11 +66,44 @@ public sealed class BillingService : IBillingService
         string providerName, string rawBody,
         IReadOnlyDictionary<string, string> headers, CancellationToken ct = default)
     {
-        if (!_providers.TryGetValue(providerName, out var provider)) return false;
+        var (note, outcome) = await ProcessWebhookCoreAsync(providerName, rawBody, headers, ct);
+        return note is not null && outcome != PaymentOutcome.Failed;
+    }
+
+#if NET11_0_OR_GREATER
+    public async Task<WebhookOutcome> ProcessWebhookAsync(
+        string providerName, string rawBody,
+        IReadOnlyDictionary<string, string> headers, CancellationToken ct = default)
+    {
+        var (note, outcome) = await ProcessWebhookCoreAsync(providerName, rawBody, headers, ct);
+
+        // Rejected and Ignored carry the provider name only - never the body or a reason.
+        if (note is null) return new WebhookRejected(providerName);
+
+        return outcome switch
+        {
+            PaymentOutcome.Fulfilled => new WebhookFulfilled(note),
+            PaymentOutcome.AlreadyProcessed => new WebhookAlreadyProcessed(note),
+            PaymentOutcome.Failed => new WebhookFailed(note),
+            _ when note.Kind == BillingEventKind.Unknown => new WebhookIgnored(providerName),
+            _ => new WebhookRecorded(note),
+        };
+    }
+#endif
+
+    /// <summary>The one webhook path behind both public entry points. A null notification
+    /// means the provider is not registered or refused the payload; the pipeline never ran
+    /// and the outcome is meaningless.</summary>
+    private async Task<(BillingNotification? Note, PaymentOutcome Outcome)> ProcessWebhookCoreAsync(
+        string providerName, string rawBody,
+        IReadOnlyDictionary<string, string> headers, CancellationToken ct)
+    {
+        if (!_providers.TryGetValue(providerName, out var provider))
+            return (null, PaymentOutcome.Failed);
 
         var note = await provider.ParseNotificationAsync(rawBody, headers, ct);
-        if (note is null) return false;
+        if (note is null) return (null, PaymentOutcome.Failed);
 
-        return await _pipeline.ProcessAsync(provider.Name, note, ct) != PaymentOutcome.Failed;
+        return (note, await _pipeline.ProcessAsync(provider.Name, note, ct));
     }
 }

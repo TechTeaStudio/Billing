@@ -86,6 +86,14 @@ public static class BillingServiceCollectionExtensions
             sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<PaymentPipeline>>()));
         services.TryAddScoped<IExternalPurchaseService, ExternalPurchaseService>();
 
+#if NET11_0_OR_GREATER
+        // Union-returning twins of HandleWebhookAsync and ClaimAsync. Separate registrations,
+        // so replacing IBillingService or IExternalPurchaseService leaves these on the
+        // library's own implementations.
+        services.TryAddScoped<IBillingWebhookProcessor, BillingService>();
+        services.TryAddScoped<IExternalPurchaseClaims, ExternalPurchaseService>();
+#endif
+
         return new BillingBuilder(services);
     }
 
