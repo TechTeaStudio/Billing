@@ -1,9 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <!-- Overrides the solution-wide net5.0-net10.0 set: only the 8/9/10 runtimes are installed
+    <!-- Overrides the solution-wide net5.0-net11.0 set: only the 8/9/10/11 runtimes are installed
          locally and in CI, and the library has a single TFM-conditional path
          (StreamReader.ReadToEndAsync overload), which net8.0 and net10.0 straddle. -->
-    <TargetFrameworks>net8.0;net9.0;net10.0</TargetFrameworks>
+    <TargetFrameworks>net8.0;net9.0;net10.0;net11.0</TargetFrameworks>
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>

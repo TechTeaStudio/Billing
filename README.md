@@ -52,8 +52,8 @@ That is all most apps need - it pulls in the contracts package below automatical
 
 | Package | What it holds | Frameworks | References |
 |---|---|---|---|
-| `TechTeaStudio.Billing` | Providers, orchestrator, DI wiring, webhook endpoints, in-memory dev stores | net5.0 → net10.0 | ASP.NET Core shared framework + `.Abstractions` |
-| `TechTeaStudio.Billing.Abstractions` | `IBillingProvider`, `IBillingService`, `IBillingPaymentStore`, `IBillingFulfillment`, `IExternalPurchaseService`, `ITelegramBot`, the attribution stores, the models, `ClaimCode`, `BillingPlanGuard` | netstandard2.0, net472, net5.0 → net10.0 | Nothing at all |
+| `TechTeaStudio.Billing` | Providers, orchestrator, DI wiring, webhook endpoints, in-memory dev stores | net5.0 → net11.0 | ASP.NET Core shared framework + `.Abstractions` |
+| `TechTeaStudio.Billing.Abstractions` | `IBillingProvider`, `IBillingService`, `IBillingPaymentStore`, `IBillingFulfillment`, `IExternalPurchaseService`, `ITelegramBot`, the attribution stores, the models, `ClaimCode`, `BillingPlanGuard` | netstandard2.0, net472, net5.0 → net11.0 | Nothing at all |
 
 The split exists for one reason: the main package carries `<FrameworkReference Include="Microsoft.AspNetCore.App" />`, and that is contagious. Reference it from a plain domain or application class library just to implement `IBillingFulfillment` and that library is now an ASP.NET Core library too. So the seams you implement live in a package with no dependencies and no framework reference:
 
@@ -111,7 +111,7 @@ Providers whose config section is absent or empty stay dormant - their `IsConfig
 
 ## Target frameworks
 
-`TechTeaStudio.Billing` ships `net5.0`, `net6.0`, `net7.0`, `net8.0`, `net9.0` and `net10.0`. `TechTeaStudio.Billing.Abstractions` adds `netstandard2.0` and `net472`.
+`TechTeaStudio.Billing` ships `net5.0`, `net6.0`, `net7.0`, `net8.0`, `net9.0`, `net10.0` and `net11.0`. `TechTeaStudio.Billing.Abstractions` adds `netstandard2.0` and `net472`.
 
 ### .NET Framework
 
@@ -293,7 +293,7 @@ dotnet test src/TechTeaStudio.Billing/TechTeaStudio.Billing.sln -c Release
 dotnet pack src/TechTeaStudio.Billing/TechTeaStudio.Billing.sln -c Release -o artifacts
 ```
 
-The library builds all six frameworks; the tests run on net8.0, net9.0 and net10.0, which is what CI has runtimes for. Packing is a separate step on purpose - `GeneratePackageOnBuild` across six frameworks and two projects would repack four packages on every build and every test run.
+The library builds all seven frameworks; the tests run on net8.0, net9.0, net10.0 and net11.0, which is what CI has runtimes for. Packing is a separate step on purpose - `GeneratePackageOnBuild` across seven frameworks and two projects would repack four packages on every build and every test run.
 
 Explorer's folder icon for this repo comes from `.icon/folder.ico` plus a `desktop.ini`, both gitignored because git cannot carry the hidden+system attribute that makes them work. Run `.\New-FolderIcon.ps1` after a fresh clone to regenerate them.
 

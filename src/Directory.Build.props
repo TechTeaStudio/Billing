@@ -25,21 +25,21 @@
     <!-- net5.0/6.0/7.0 are out of support upstream; they are carried here so hosts stuck on an
          older runtime can still take security fixes to this library. The SDK downloads the
          matching reference packs from NuGet, so no old SDK needs to be installed to build them. -->
-    <TargetFrameworks>net5.0;net6.0;net7.0;net8.0;net9.0;net10.0</TargetFrameworks>
+    <TargetFrameworks>net5.0;net6.0;net7.0;net8.0;net9.0;net10.0;net11.0</TargetFrameworks>
     <CheckEolTargetFramework>false</CheckEolTargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);CS1591;CS1573;CS1574</NoWarn>
-    <!-- The same source compiles six times, so a warning that fires on one old framework only is
-         one line in a log six times longer than it used to be - easy to scroll past. Fatal on the
+    <!-- The same source compiles seven times, so a warning that fires on one old framework only is
+         one line in a log seven times longer than it used to be - easy to scroll past. Fatal on the
          build server; left as warnings locally so iteration stays fast. -->
     <TreatWarningsAsErrors Condition="'$(GITHUB_ACTIONS)' == 'true'">true</TreatWarningsAsErrors>
   </PropertyGroup>
 
   <PropertyGroup>
-    <!-- Deliberately NO GeneratePackageOnBuild. Six frameworks times two packable projects means
+    <!-- Deliberately NO GeneratePackageOnBuild. Seven frameworks times two packable projects means
          it would repack four .nupkg/.snupkg on every build - including Debug and every
          dotnet test run - and leave Debug-configuration packages sitting in bin/Debug.
          Packing is one explicit Release step; CI already runs it that way. -->
@@ -55,7 +55,7 @@
          locally rewrites source paths and breaks step-through debugging in the IDE. -->
     <ContinuousIntegrationBuild Condition="'$(GITHUB_ACTIONS)' == 'true'">true</ContinuousIntegrationBuild>
     <Deterministic>true</Deterministic>
-    <!-- Fails the pack if the six target frameworks do not expose the same public API, which is
+    <!-- Fails the pack if the seven target frameworks do not expose the same public API, which is
          the failure mode a TFM-conditional (#if) most easily introduces. -->
     <EnablePackageValidation>true</EnablePackageValidation>
   </PropertyGroup>

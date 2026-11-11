@@ -3,6 +3,15 @@
 All notable changes to this package are documented here.
 Format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.1] - 2026-11-11
+
+.NET 11 support. Both packages gain a `net11.0` target; nothing else changes, and every older target stays.
+
+### Added
+
+- **`net11.0` target** in both packages. `TechTeaStudio.Billing` now ships `net5.0` through `net11.0`; `TechTeaStudio.Billing.Abstractions` adds `net11.0` beside `netstandard2.0`, `net472` and `net5.0`-`net10.0`. No API or behaviour change.
+- The test project also runs on `net11.0`.
+
 ## [0.6.0] - 2026-11-02
 
 Payment hardening after a full audit: stricter webhook validation, refunds that can reach the host, and no more charges that grant nothing. Upgrading is recommended for every host using YooKassa.
