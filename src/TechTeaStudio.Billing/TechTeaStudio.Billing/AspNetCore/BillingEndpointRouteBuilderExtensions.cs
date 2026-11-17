@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using TechTeaStudio.Billing.Abstractions;
+using TechTeaStudio.Billing.Providers;
 
 namespace TechTeaStudio.Billing.AspNetCore;
 
@@ -63,6 +64,16 @@ public static class BillingEndpointRouteBuilderExtensions
         ctx.Response.StatusCode = ok
             ? StatusCodes.Status200OK
             : StatusCodes.Status400BadRequest;
+
+        // Some gateways take a webhook as delivered only on a body of their own (Robokassa: "OK<InvId>").
+        if (ok && ctx.RequestServices.GetServices<IBillingProvider>()
+                .FirstOrDefault(p => string.Equals(p.Name, provider, StringComparison.OrdinalIgnoreCase))
+                is IBillingWebhookReply replying
+            && replying.ReplyTo(body) is { } reply)
+        {
+            ctx.Response.ContentType = "text/plain";
+            await ctx.Response.WriteAsync(reply, ctx.RequestAborted);
+        }
     }
 
     // POST {basePath}/telegram/bot
