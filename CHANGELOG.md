@@ -3,6 +3,21 @@
 All notable changes to this package are documented here.
 Format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0] - 2026-11-17
+
+Robokassa, the gateway a self-employed seller in Russia can use with receipts sent to Moy Nalog by Robokassa itself. The payment page is a signed link and the shop's Result URL is the only proof of payment, so there is no API call on either side.
+
+### Added
+
+- **`RobokassaBillingProvider`** (`AddRobokassa`, config section `Billing:Robokassa`). The link is signed with Password #1 over `MerchantLogin:OutSum:InvId:Password1[:Shp_*]`; the Result URL form is verified with Password #2 over `OutSum:InvId:Password2[:Shp_*]` exactly as posted, compared in constant time and without regard to case. The buyer and the plan travel as `Shp_user` and `Shp_plan`, under both signatures.
+- **Hash** as set in the shop: SHA256 by default, also MD5, SHA1, SHA384 and SHA512.
+- **Test payments** use their own password pair and `IsTest=1`. A live shop refuses a test payment and a test shop a live one.
+- **Amount check**: a payment below the plan's price grants nothing, as with YooKassa.
+- **`InvoiceIdFactory`**: the host hands out the invoice number (the idempotency key), for example a database sequence; without one a random positive number is used.
+- **`IBillingWebhookReply`**: a provider can give the webhook endpoint a body to answer with. Robokassa answers `OK<InvId>`, without which it keeps retrying and reports the Result URL as failing.
+
+Refunds go through Robokassa's cabinet; the provider sends no refund events.
+
 ## [0.7.0] - 2026-11-11
 
 Typed outcomes for the two calls that used to answer with a bool. On .NET 11 a webhook and a claim of a held purchase can now say what happened as a C# 15 union, so the host writes one exhaustive `switch` and the compiler flags a case it forgot. The bool APIs stay everywhere and run the same code.

@@ -16,6 +16,7 @@ public interface IBillingBuilder
 
     IBillingBuilder AddStripe(Action<StripeBillingOptions> configure);
     IBillingBuilder AddYooKassa(Action<YooKassaBillingOptions> configure);
+    IBillingBuilder AddRobokassa(Action<RobokassaBillingOptions> configure);
     IBillingBuilder AddShopify(Action<ShopifyBillingOptions> configure);
     IBillingBuilder AddTelegramStars(Action<TelegramBillingOptions> configure);
 
@@ -133,6 +134,7 @@ public static class BillingServiceCollectionExtensions
 
         builder.AddStripe(o => config.GetSection($"{sectionName}:Stripe").Bind(o));
         builder.AddYooKassa(o => config.GetSection($"{sectionName}:YooKassa").Bind(o));
+        builder.AddRobokassa(o => config.GetSection($"{sectionName}:Robokassa").Bind(o));
         builder.AddShopify(o => config.GetSection($"{sectionName}:Shopify").Bind(o));
         builder.AddTelegramStars(o => config.GetSection($"{sectionName}:Telegram").Bind(o));
         builder.AddKofi(o => config.GetSection($"{sectionName}:Kofi").Bind(o));
@@ -164,6 +166,16 @@ internal sealed class BillingBuilder : IBillingBuilder
         Services.AddHttpClient<YooKassaBillingProvider>();
         Services.AddScoped<IBillingProvider>(
             sp => sp.GetRequiredService<YooKassaBillingProvider>());
+        return this;
+    }
+
+    public IBillingBuilder AddRobokassa(Action<RobokassaBillingOptions> configure)
+    {
+        Services.Configure(configure);
+        // No HttpClient: the payment page is a signed link and the Result URL is inbound.
+        Services.AddScoped<RobokassaBillingProvider>();
+        Services.AddScoped<IBillingProvider>(
+            sp => sp.GetRequiredService<RobokassaBillingProvider>());
         return this;
     }
 

@@ -5,7 +5,7 @@
 <h1 align="center">TechTeaStudio.Billing</h1>
 
 <p align="center">
-  Provider-agnostic payment billing for ASP.NET Core. One seam: Stripe, YooKassa, Shopify, Telegram Stars, Ko-fi, Patreon.
+  Provider-agnostic payment billing for ASP.NET Core. One seam: Stripe, YooKassa, Robokassa, Shopify, Telegram Stars, Ko-fi, Patreon.
 </p>
 
 <p align="center">
@@ -19,10 +19,10 @@
 
 ## What this gives you
 
-A single `IBillingProvider` seam that fronts six payment surfaces behind one orchestrator. Wire up Stripe, YooKassa, Shopify, Telegram Stars, Ko-fi, or Patreon (or all at once) and your business logic never references a gateway directly.
+A single `IBillingProvider` seam that fronts six payment surfaces behind one orchestrator. Wire up Stripe, YooKassa, Robokassa, Shopify, Telegram Stars, Ko-fi, or Patreon (or all at once) and your business logic never references a gateway directly.
 
 - Hosted checkout sessions with a redirect URL for each gateway provider.
-- Verified, idempotent webhook processing. Every provider uses its own hardened verification: HMAC-SHA256 for Stripe and Shopify, re-fetch from the API for YooKassa, secret-token header for Telegram, constant-time verification token for Ko-fi, HMAC-MD5 (Patreon's mandated scheme) for Patreon.
+- Verified, idempotent webhook processing. Every provider uses its own hardened verification: HMAC-SHA256 for Stripe and Shopify, re-fetch from the API for YooKassa, constant-time hash of the signed form for Robokassa, secret-token header for Telegram, constant-time verification token for Ko-fi, HMAC-MD5 (Patreon's mandated scheme) for Patreon.
 - External purchases: donations and memberships that happen ON the platform (Ko-fi, Patreon, Boosty) are attributed to app users via claim codes and identity links; anything unattributable lands in an unclaimed holding area instead of being lost. See "External purchases" below.
 - Refund tracking: a refunded payment is marked `Refunded` and a redelivered success webhook can never re-grant it.
 - Pluggable `IBillingPaymentStore` so you own the payment record in your own database.
@@ -190,6 +190,7 @@ return Redirect(session.RedirectUrl);
 |---|---|---|
 | Stripe | HMAC-SHA256 of `{timestamp}.{body}` via `Stripe-Signature` header | 5-minute replay window; `payment_status == "paid"` guard |
 | YooKassa | Re-fetch payment from the API (webhook body is unsigned) | Underpaid defence compares amount to `Amounts[planId]` |
+| Robokassa | Hash of `OutSum:InvId:Password2[:Shp_*]` over the posted form, constant-time, case-insensitive; test payments only on a test shop | Underpaid defence compares `OutSum` to `Amounts[planId]`; answers `OK<InvId>` |
 | Shopify | HMAC-SHA256 Base64 via `X-Shopify-Hmac-Sha256` header | Underpaid defence on `note_attributes` - buyer-influenceable |
 | Telegram Stars | `X-Telegram-Bot-Api-Secret-Token` exact-match | Deep-link checkout; bot sends XTR invoice; `WebhookSecret` required |
 | Ko-fi | Static `verification_token` inside the payload, constant-time compare (Ko-fi offers no HMAC) | Body is form-urlencoded with a `data` field carrying JSON; no refund/cancel webhooks exist - time-box entitlements |

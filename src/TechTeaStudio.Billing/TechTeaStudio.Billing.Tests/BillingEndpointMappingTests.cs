@@ -62,6 +62,37 @@ public class BillingEndpointMappingTests
     }
 
     [Fact]
+    public async Task An_accepted_webhook_is_answered_with_the_body_the_provider_asks_for()
+    {
+        // Robokassa counts a Result URL call as delivered only on "OK<InvId>".
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddSingleton<IBillingService>(new RecordingBillingService(accept: true));
+        services.AddSingleton<IBillingProvider>(new ReplyingProvider());
+        var ctx = NewContext(services.BuildServiceProvider(), body: "InvId=4242");
+
+        await InvokeAsync(MapAndFind("/billing/webhook/{provider}"), ctx, provider: "replying");
+
+        ctx.Response.Body.Position = 0;
+        Assert.Equal("OK4242", new StreamReader(ctx.Response.Body).ReadToEnd());
+        Assert.Equal("text/plain", ctx.Response.ContentType);
+        Assert.Equal(StatusCodes.Status200OK, ctx.Response.StatusCode);
+    }
+
+    private sealed class ReplyingProvider : IBillingProvider, TechTeaStudio.Billing.Providers.IBillingWebhookReply
+    {
+        public string Name => "replying";
+        public string DisplayName => "Replying";
+        public bool IsConfigured => true;
+        public Task<CheckoutSession> CreateCheckoutAsync(BillingCheckoutRequest request, CancellationToken ct = default) =>
+            throw new NotSupportedException();
+        public Task<BillingNotification?> ParseNotificationAsync(
+            string rawBody, IReadOnlyDictionary<string, string> headers, CancellationToken ct = default) =>
+            throw new NotSupportedException();
+        public string? ReplyTo(string rawBody) => "OK" + rawBody.Split('=')[1];
+    }
+
+    [Fact]
     public async Task Telegram_route_returns_404_when_no_bot_is_registered()
     {
         // No AddTelegramStars() means no ITelegramBot, so the endpoint must not pretend to work.
