@@ -4,10 +4,10 @@
     <PackageId>TechTeaStudio.Billing</PackageId>
     <!-- Must be a literal tag in this file - the publish workflow greps for it. Keep in sync
          with TechTeaStudio.Billing.Abstractions.csproj; see the note in Directory.Build.props. -->
-    <Version>0.8.0</Version>
+    <Version>0.9.0</Version>
     <Description>Provider-agnostic payment billing for ASP.NET Core. Hosted checkout and verified webhooks for Stripe, YooKassa, Shopify and Telegram Stars, plus external donation platforms (Ko-fi, Patreon, manual Boosty) with claim-code attribution and an unclaimed-purchase holding area - all behind one IBillingProvider seam with pluggable payment store and fulfillment. Targets net5.0 through net11.0.</Description>
     <PackageTags>billing;payments;stripe;yookassa;shopify;telegram;kofi;patreon;boosty;donations;checkout;webhook;aspnetcore;TechTeaStudio</PackageTags>
-    <PackageReleaseNotes>v0.8.0: Robokassa provider (AddRobokassa, "Billing:Robokassa"): signed payment links with Password #1, Result URL verified with Password #2 in constant time, SHA256 by default (MD5 to SHA512 supported), separate test passwords and IsTest, Shp_user and Shp_plan under the signature, amount checked against the plan, the invoice number from a host factory. The webhook endpoint answers "OK&lt;InvId&gt;" through the new IBillingWebhookReply.</PackageReleaseNotes>
+    <PackageReleaseNotes>v0.9.0: Robokassa sends the cart for receipts (SendReceipt, ReceiptTax, ReceiptPaymentMethod, ReceiptPaymentObject): one item with the plan's name and price, minimized JSON URL-encoded once inside the signature after InvId and again in the link, as Robochecks for the self-employed need. v0.8.0: Robokassa provider (AddRobokassa, "Billing:Robokassa"): signed payment links with Password #1, Result URL verified with Password #2 in constant time, SHA256 by default (MD5 to SHA512 supported), separate test passwords and IsTest, Shp_user and Shp_plan under the signature, amount checked against the plan, the invoice number from a host factory. The webhook endpoint answers "OK&lt;InvId&gt;" through the new IBillingWebhookReply.</PackageReleaseNotes>
   </PropertyGroup>
 
   <ItemGroup>

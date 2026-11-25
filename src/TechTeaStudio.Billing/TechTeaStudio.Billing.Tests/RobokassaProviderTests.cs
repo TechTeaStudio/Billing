@@ -96,6 +96,44 @@ public class RobokassaProviderTests
         Assert.Equal(Sha256($"techteastudio:490.00:4242:live-one:{Shp(User, "pro-1")}"), q["SignatureValue"]);
     }
 
+    // Robochecks (the self-employed seller's receipts) need the cart: the minimized JSON,
+    // URL-encoded once, goes into the signature right after InvId and is encoded again in the
+    // link (docs.robokassa.ru/ru/fiscalization, /ru/pay-interface).
+    [Fact]
+    public async Task With_receipts_the_cart_is_in_the_link_and_in_the_signature_after_the_invoice()
+    {
+        var session = await Provider(o => { o.SendReceipt = true; o.ReceiptPaymentObject = "intellectual_activity"; })
+            .CreateCheckoutAsync(Checkout());
+
+        var json = "{\"items\":[{\"name\":\"TrafficMeter Pro, 1 computer\",\"quantity\":1,\"sum\":490.00," +
+            "\"payment_method\":\"full_payment\",\"payment_object\":\"intellectual_activity\",\"tax\":\"none\"}]}";
+        var encoded = Uri.EscapeDataString(json);
+        var q = QueryHelpers.ParseQuery(new Uri(session.RedirectUrl).Query);
+        Assert.Equal(encoded, q["Receipt"]);
+        Assert.Contains("Receipt=" + Uri.EscapeDataString(encoded), session.RedirectUrl);
+        Assert.Equal(Sha256($"techteastudio:490.00:4242:{encoded}:live-one:{Shp(User, "pro-1")}"), q["SignatureValue"]);
+    }
+
+    [Fact]
+    public async Task A_receipt_item_name_is_cut_to_128_characters()
+    {
+        var request = Checkout() with { PlanName = new string('n', 200) };
+
+        var session = await Provider(o => o.SendReceipt = true).CreateCheckoutAsync(request);
+
+        var json = Uri.UnescapeDataString(QueryHelpers.ParseQuery(new Uri(session.RedirectUrl).Query)["Receipt"]!);
+        Assert.Contains("\"name\":\"" + new string('n', 128) + "\"", json);
+        Assert.DoesNotContain(new string('n', 129), json);
+    }
+
+    [Fact]
+    public async Task Without_receipts_there_is_no_cart()
+    {
+        var session = await Provider().CreateCheckoutAsync(Checkout());
+
+        Assert.False(QueryHelpers.ParseQuery(new Uri(session.RedirectUrl).Query).ContainsKey("Receipt"));
+    }
+
     [Fact]
     public async Task A_test_shop_signs_with_the_test_password_and_marks_the_link()
     {

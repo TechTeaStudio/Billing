@@ -23,6 +23,21 @@ public sealed class RobokassaBillingOptions
     /// SHA256, SHA384 or SHA512. Defaults to SHA256.</summary>
     public string HashAlgorithm { get; set; } = "SHA256";
 
+    /// <summary>Send the cart (Receipt) with every payment: one item, the plan's name and price.
+    /// Robokassa's receipts (Robochecks for the self-employed, cloud fiscalisation) are built from
+    /// it; without it the receipt is not formed correctly.</summary>
+    public bool SendReceipt { get; set; }
+
+    /// <summary>The item's VAT: "none" for a seller without VAT (the self-employed).</summary>
+    public string ReceiptTax { get; set; } = "none";
+
+    /// <summary>The item's payment method: "full_payment" for a product handed over on payment.</summary>
+    public string ReceiptPaymentMethod { get; set; } = "full_payment";
+
+    /// <summary>What the item is: "service", "commodity", "intellectual_activity" (a software
+    /// license) and the rest of Robokassa's list.</summary>
+    public string ReceiptPaymentObject { get; set; } = "service";
+
     /// <summary>Robokassa's payment page.</summary>
     public string PaymentUrl { get; set; } = "https://auth.robokassa.ru/Merchant/Index.aspx";
 

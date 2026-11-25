@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -57,7 +58,10 @@ public sealed class RobokassaBillingProvider : IBillingProvider, IBillingWebhook
             ["Shp_plan"] = req.PlanId,
             ["Shp_user"] = req.UserId.ToString("N"),
         };
-        var signature = Hash($"{_opts.MerchantLogin}:{outSum}:{inv}:{Password1}{ShpTail(shp)}");
+        // The cart for the receipt: minimized JSON, URL-encoded once, signed right after InvId
+        // ("MerchantLogin:OutSum:InvId:Receipt:Password1[:Shp_*]") and encoded again in the link.
+        var receipt = _opts.SendReceipt ? Uri.EscapeDataString(ReceiptJson(req.PlanName, outSum)) : null;
+        var signature = Hash($"{_opts.MerchantLogin}:{outSum}:{inv}:{(receipt is null ? "" : receipt + ":")}{Password1}{ShpTail(shp)}");
 
         // Built by hand: QueryHelpers.AddQueryString changed its signature between net5 and net6.
         var query = new List<(string Key, string Value)>
@@ -68,6 +72,7 @@ public sealed class RobokassaBillingProvider : IBillingProvider, IBillingWebhook
             ("Description", req.PlanName.Length > 100 ? req.PlanName.Substring(0, 100) : req.PlanName),
             ("SignatureValue", signature),
         };
+        if (receipt is not null) query.Add(("Receipt", receipt));
         if (!string.IsNullOrWhiteSpace(req.Email)) query.Add(("Email", req.Email));
         if (_opts.IsTest) query.Add(("IsTest", "1"));
         foreach (var kv in shp) query.Add((kv.Key, kv.Value));
@@ -155,6 +160,16 @@ public sealed class RobokassaBillingProvider : IBillingProvider, IBillingWebhook
         return form.TryGetValue("InvId", out var raw)
             && long.TryParse(raw, NumberStyles.None, CultureInfo.InvariantCulture, out invId)
             && invId > 0;
+    }
+
+    /// <summary>One item: the plan, once, for the whole sum. Robokassa allows 128 characters of name.</summary>
+    private string ReceiptJson(string planName, string outSum)
+    {
+        var name = planName.Length > 128 ? planName.Substring(0, 128) : planName;
+        return "{\"items\":[{\"name\":" + JsonSerializer.Serialize(name) + ",\"quantity\":1,\"sum\":" + outSum
+            + ",\"payment_method\":" + JsonSerializer.Serialize(_opts.ReceiptPaymentMethod)
+            + ",\"payment_object\":" + JsonSerializer.Serialize(_opts.ReceiptPaymentObject)
+            + ",\"tax\":" + JsonSerializer.Serialize(_opts.ReceiptTax) + "}]}";
     }
 
     private static string ShpTail(SortedDictionary<string, string> shp)

@@ -3,6 +3,14 @@
 All notable changes to this package are documented here.
 Format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.0] - 2026-11-25
+
+Robokassa forms the self-employed seller's receipt (Robochecks) from the cart the shop sends with the payment; without it the receipt is not formed correctly.
+
+### Added
+
+- **Receipts for Robokassa**: `SendReceipt` adds the cart to every payment link. One item, the plan's name (cut to Robokassa's 128 characters) and price, quantity 1, with `ReceiptTax` (default `none`), `ReceiptPaymentMethod` (default `full_payment`) and `ReceiptPaymentObject` (default `service`; `intellectual_activity` for a software license). The minimized JSON is URL-encoded once and signed right after the invoice number, `MerchantLogin:OutSum:InvId:Receipt:Password1[:Shp_*]`, and encoded again in the link, as Robokassa documents it. The Result URL signature is unchanged.
+
 ## [0.8.0] - 2026-11-17
 
 Robokassa, the gateway a self-employed seller in Russia can use with receipts sent to Moy Nalog by Robokassa itself. The payment page is a signed link and the shop's Result URL is the only proof of payment, so there is no API call on either side.
